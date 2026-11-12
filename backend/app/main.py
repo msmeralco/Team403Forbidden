@@ -10,10 +10,9 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, cases, liwa
+from . import ai, case_reports, cases, liwa
 from .config import CONFIG
 from .reports import SOURCES
-from .simulation import evaluate
 from .state import Conflict, NeedsPlace, Session
 
 app = FastAPI(title="FIRSTLOOK", version="0.1.0")
@@ -62,11 +61,6 @@ class Reset(BaseModel):
     seed: int | None = None
 
 
-class Evaluate(BaseModel):
-    runs: int = Field(default=200, ge=10, le=1000)
-    seed: int = 1
-
-
 @app.get("/api/state")
 def state():
     return s().state()
@@ -98,22 +92,26 @@ def liwa_plan(force: bool = False):
 
 @app.get("/api/cases")
 def list_cases():
-    """Test cases found in backend/cases, and any file that could not be read."""
-    found, errors = cases.load_all()
-    return {"cases": [cases.summary(c) for c in found], "errors": errors, "current": s().case}
+    """The test cases (backend/cases/meralco_demo.sqlite) with their jobs, expected answers and any decision made so far."""
+    made = liwa.decided()
+    return {"cases": [{**c, "place": case_reports.place_of(i), "decision": made.get(c["id"])} for i, c in enumerate(cases.all_cases())],
+            "tiers": cases.tiers() if cases.available() else {}, "generator": liwa.generator(), "model": liwa.CLAUDE_MODEL}
 
 
-@app.post("/api/cases/{case_id}/stages/{number}")
-def load_stage(case_id: str, number: int):
-    """Start one stage of a test case: stage 1 is the typhoon, later stages the interruptions that follow."""
+@app.get("/api/cases/{case_id}/reports")
+def case_reports_for(case_id: str):
+    """What customers reported about one interruption: invented messages, linked to the equipment each is about."""
     case = cases.find(case_id)
-    if case is None or not 1 <= number <= len(case["stages"]):
-        raise KeyError(f"No stage {number} in case {case_id}")
-    _current["session"].alive = False
-    _current["session"] = Session(scenario=case["stages"][number - 1])
-    s().case = cases.summary(case, number)
-    liwa.warm(s())
-    return s().state()
+    if case is None:
+        raise KeyError(f"No test case {case_id}")
+    found = case_reports.for_case(case)
+    return {"case_id": case_id, "channels": case_reports.CHANNELS, "summary": case_reports.summary(found), "reports": found}
+
+
+@app.get("/api/cases/{case_id}/decision")
+def case_decision(case_id: str, force: bool = False):
+    """Liwa's recommendation for one test case: retrieve the guidance, decide, and compare with the expected answer."""
+    return liwa.decide(case_id, force)
 
 
 class Photo(BaseModel):
@@ -252,8 +250,3 @@ def reset(body: Reset):
     _current["session"] = Session(seed=body.seed)
     liwa.warm(s())
     return s().state()
-
-
-@app.post("/api/evaluate")
-def run_evaluation(body: Evaluate):
-    return evaluate(body.runs, body.seed, s().roads)

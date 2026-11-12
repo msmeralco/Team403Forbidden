@@ -2,8 +2,7 @@
 // Pure functions over the storm state: no map, no drawing.
 
 export const LEVEL = {
-  segment: 'Main line', switch: 'Switch on the main line', pole: 'Pole on the main line',
-  lateral: 'Branch line', transformer: 'Distribution transformer',
+  segment: 'Main line', switch: 'Switch', pole: 'Pole', lateral: 'Branch line', fuse: 'Fuse cutout', transformer: 'Distribution transformer',
 }
 export const METERS = 24          // meters drawn for each barangay: a sample, not every account
 export const ZONES = [2, 5, 10]   // radius choices, in km, for the zone around an opened case

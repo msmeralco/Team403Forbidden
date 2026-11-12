@@ -1,9 +1,7 @@
-// Liwa: the inspection planner. She floats over the map; click her to see the plan.
-// There is nothing to type. When the picture changes, the backend retrieves the guidance that fits
-// from the reference documents in its local vector database and has Claude write the plan from it
-// (or keeps FirstLook's own order when Claude is not reachable).
-// She advises only: she cannot dispatch, repair or send anything.
-import { Component, Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+// Liwa: the planner. She floats over the map and thinks while she ranks an interruption's
+// equipment. Click her to see the hierarchy she ranks by and to let her plan every interruption.
+// There is nothing to type, and she only recommends: she cannot dispatch, repair or send anything.
+import { Component, Suspense, lazy, useEffect, useState } from 'react'
 import { api } from '../api'
 import { Close } from '../icons'
 import AssistantPanel from './AssistantPanel'
@@ -58,71 +56,31 @@ class SceneBoundary extends Component {
   render() { return this.state.failed ? this.props.fallback : this.props.children }
 }
 
-export default function Assistant({ state, note, mobile, sheetOpen, onOpen }) {
+// busy: she is ranking something now. lastDecision: the latest result, so she can react to it.
+export default function Assistant({ cases, busy, running, lastDecision, mobile, sheetOpen, onRunAll }) {
   const still = useMedia('(prefers-reduced-motion: reduce)')
   const visible = useTabVisible()
   const view = useViewport()
   const [webgl, setWebgl] = useState(hasWebGL)
-  const [status, setStatus] = useState(null)   // what is indexed, whether Claude is reachable, a short brief
-  const [plan, setPlan] = useState(null)       // the inspection plan for the storm as it stands
-  const [planning, setPlanning] = useState(false)
-  const [error, setError] = useState(null)
+  const [status, setStatus] = useState(null)   // whether Claude is reachable, and the hierarchy she ranks by
   const [panel, setPanel] = useState(false)
   const [mini, setMini] = useState(false)
-  const [flash, setFlash] = useState(null)     // a short pose: speaking, alert or success
+  const [flash, setFlash] = useState(null)     // a short pose after a result
   const [hover, setHover] = useState(false)
   const [spoken, setSpoken] = useState('')     // announced to screen readers
   const [place, setPlace] = useState({ right: 64, bottom: 14 })
-  const dragged = useRef(false)
-  const firstNote = useRef(true)
+  const [dragging, setDragging] = useState(false)
 
-  const pose = useCallback((name, ms) => {
-    setFlash(name)
-    setTimeout(() => setFlash((f) => (f === name ? null : f)), ms)
-  }, [])
-  // No speech bubble: Liwa moves when she has something to say, and the words go to screen readers.
-  const say = useCallback((text) => { setSpoken(text); pose('speaking', 2400) }, [pose])
-
-  // The brief follows the storm. A plan is written only while the panel is open, and again when
-  // something changes: a new stage, a field result, a repair, a hazard made safe.
-  const eventId = state.event.id
-  const version = `${eventId}-${state.log.length}-${state.repaired.length}-${state.summary.hazards_open}-${state.summary.reports}`
-  useEffect(() => { setPlan(null); setError(null) }, [eventId])
+  useEffect(() => { api.liwa().then(setStatus).catch(() => {}) }, [])
   useEffect(() => {
-    let live = true
-    api.liwa().then((s) => { if (live) setStatus(s) }).catch(() => {})
-    return () => { live = false }
-  }, [version])
+    if (!lastDecision) return undefined
+    setSpoken(`Liwa: ${lastDecision.action === 'HOLD' ? 'hold the crew' : `send the crew to ${lastDecision.pole_id}`}. ${lastDecision.reason}`)
+    setFlash(lastDecision.action === 'HOLD' ? 'alert' : 'success')
+    const timer = setTimeout(() => setFlash(null), 1800)
+    return () => clearTimeout(timer)
+  }, [lastDecision?.key]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const writePlan = useCallback(async (force = false) => {
-    setPlanning(true); setError(null)
-    try {
-      const made = await api.liwaPlan(force)
-      setPlan(made)
-      say(made.steps.length ? `Inspection plan ready. First: ${made.steps[0].name}.` : 'Nothing urgent is left to inspect.')
-    } catch (e) {
-      setError(e.message)
-    }
-    setPlanning(false)
-  }, [say])
-  useEffect(() => { if (panel) writePlan() }, [panel, version, writePlan])
-
-  // Field results and repairs are other people's work; announce them as that.
-  useEffect(() => {
-    if (firstNote.current) { firstNote.current = false; return }
-    if (!note || note.quiet) return
-    say(`${note.field ? 'From the field: ' : ''}${note.title}. ${note.body}`)
-    if (note.title.startsWith('Damage pinned down')) pose('success', 2200)
-    else if (note.tone === 'bad') pose('alert', 1500)
-  }, [note?.id])   // eslint-disable-line react-hooks/exhaustive-deps
-
-  const pose3d = useMemo(() => {
-    if (planning) return 'thinking'
-    if (flash) return flash
-    return hover ? 'listening' : 'idle'
-  }, [flash, planning, hover])
-
-  const openPanel = () => { if (!dragged.current) setPanel(true) }
+  const pose = busy ? 'thinking' : flash ?? (hover ? 'listening' : 'idle')
   useEffect(() => {
     if (!panel) return undefined
     const onKey = (e) => { if (e.key === 'Escape') setPanel(false) }
@@ -142,13 +100,13 @@ export default function Assistant({ state, note, mobile, sheetOpen, onOpen }) {
       const dy = ev.clientY - from.y
       if (!moved && Math.hypot(dx, dy) < 6) return
       moved = true
-      dragged.current = true
+      setDragging(true)
       setPlace({ right: clamp(from.right - dx, 8, window.innerWidth - W - 80), bottom: clamp(from.bottom - dy, 8, window.innerHeight - H - 70) })
     }
     const up = () => {
       window.removeEventListener('pointermove', move)
       window.removeEventListener('pointerup', up)
-      if (moved) setTimeout(() => { dragged.current = false }, 0)
+      if (moved) setTimeout(() => setDragging(false), 0)
     }
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
@@ -162,32 +120,26 @@ export default function Assistant({ state, note, mobile, sheetOpen, onOpen }) {
   const panelStyle = mobile ? undefined
     : above >= 380 ? { right: 0, bottom: 'calc(100% + 10px)', maxHeight: above }
       : { right: 'calc(100% + 10px)', bottom: 0, maxHeight: view.h - anchor.bottom - 84 }
-  const fallback = <div className="flat-crew"><Flat state={pose3d} size={mobile ? 56 : 84} /></div>
+  const fallback = <div className="flat-crew"><Flat state={pose} size={mobile ? 56 : 84} /></div>
 
   return (
     <div className={`liwa${mobile ? ' phone' : ''}${small ? ' small' : ''}`} style={anchor}>
       <p className="sr-only" aria-live="polite">{spoken}</p>
-
-      {panel && (
-        <AssistantPanel status={status} plan={plan} planning={planning} error={error} style={panelStyle}
-          onUpdate={() => writePlan(true)} onClose={() => setPanel(false)}
-          onOpen={(sel) => { onOpen(sel); if (mobile) setPanel(false) }} />
-      )}
-
+      {panel && <AssistantPanel status={status} cases={cases} busy={busy} running={running} style={panelStyle} onRunAll={onRunAll} onClose={() => setPanel(false)} />}
       {mobile && panel ? null : small ? (
-        <button className="liwa-mini" onClick={() => { setMini(false); if (mobile) openPanel() }} aria-label="Show Liwa" title="Show Liwa"><Bolt size={24} /></button>
+        <button className="liwa-mini" onClick={() => { setMini(false); if (mobile) setPanel(true) }} aria-label="Show Liwa" title="Show Liwa"><Bolt size={24} /></button>
       ) : (
         <div className="liwa-stage" style={{ width: W, height: H }} onPointerDown={startDrag}>
           <div className="liwa-canvas" style={{ height: H - 26 }}>
             {webgl ? (
               <SceneBoundary fallback={fallback} onFail={() => setWebgl(false)}>
-                <Suspense fallback={fallback}><Scene state={pose3d} still={still} paused={!visible} /></Suspense>
+                <Suspense fallback={fallback}><Scene state={pose} still={still} paused={!visible} /></Suspense>
               </SceneBoundary>
             ) : fallback}
           </div>
-          <button className={`liwa-hit is-${pose3d}`} onClick={openPanel} onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}
-            onFocus={() => setHover(true)} onBlur={() => setHover(false)} aria-label="Liwa, the inspection planner. Open the inspection plan.">
-            <span className="liwa-name">Inspection plan</span>
+          <button className={`liwa-hit is-${pose}`} onClick={() => { if (!dragging) setPanel(true) }} onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}
+            onFocus={() => setHover(true)} onBlur={() => setHover(false)} aria-label="Liwa, the planner. Open to see the hierarchy she ranks by.">
+            <span className="liwa-name">{busy ? 'Liwa is ranking' : 'Liwa'}</span>
           </button>
           <button className="liwa-min" onClick={() => { setMini(true); setPanel(false) }} onPointerDown={(e) => e.stopPropagation()}
             aria-label="Minimise Liwa" title="Minimise"><Close size={12} /></button>

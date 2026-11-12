@@ -26,13 +26,13 @@ export const api = {
   restrict: (id, on) => call(`/assets/${id}/${on ? 'restrict' : 'unrestrict'}`, {}),
   priority: (id, weight) => call(`/assets/${id}/priority`, { weight }),
   reset: (seed) => call('/reset', { seed }),
-  evaluate: (runs, seed) => call('/evaluate', { runs, seed }),
   config: () => call('/config'),
   truth: () => call('/truth'),
   liwa: () => call('/liwa'),
   liwaPlan: (force = false) => call(`/liwa/plan${force ? '?force=true' : ''}`),
   cases: () => call('/cases'),
-  loadStage: (id, number) => call(`/cases/${encodeURIComponent(id)}/stages/${number}`, {}),
+  caseReports: (id) => call(`/cases/${encodeURIComponent(id)}/reports`),
+  caseDecision: (id, force = false) => call(`/cases/${encodeURIComponent(id)}/decision${force ? '?force=true' : ''}`),
 }
 
 export const minutes = (m) => {

@@ -9,6 +9,7 @@ Nothing here calls a model or a database; see liwa.py for storage, search and wo
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -22,9 +23,9 @@ CHANNEL = {"facebook_post": "Facebook posts", "facebook_comment": "Facebook comm
            "sms": "SMS", "hotline": "hotline calls", "app": "Meralco App reports"}
 RULE = ("The list is ranked in strict order. First, safety: a place with an open hazard such as a live wire, sparks or a "
         "fallen pole goes to the top. Second, essential facilities: places that feed hospitals, health centers, evacuation "
-        "centers or water pumping stations that are likely without power. Third, the network: a main line comes before a "
-        "switch or pole on it, then a branch line, then a distribution transformer, because more depends on what is closer "
-        "to the substation. Fourth, customers and load: how many customer accounts the engine predicts are without power "
+        "centers or water pumping stations that are likely without power. Third, the network: equipment closer to the "
+        "substation comes first (main line, then switch or pole, branch line, fuse cutout, distribution transformer), "
+        "because more depends on it. Fourth, customers and load: how many customer accounts the engine predicts are without power "
         "behind the place. Fifth, reports: how many people reported from the barangays behind it. Sixth, access: the shorter "
         "drive first. This order applies to places where damage is plausible: a place the evidence points away from (less than a "
         "5% chance the damage is there) or where a visit would tell us almost nothing stays at the bottom.")
@@ -364,12 +365,31 @@ def _chunks(text: str) -> list[str]:
 
 
 def reference_docs(folder: Path) -> list[dict]:
-    """Every .md and .txt file in the folder (except README.md), split by heading and then into chunks."""
+    """Reference records from the folder.
+
+    .jsonl  one record per line: {"id", "text", "metadata": {"title", "kind", "case_id"}}. Each line is one
+            record, kept whole. A record with a case_id is a worked example of that test case.
+    .md, .txt (except README.md)  split by heading and then into chunks."""
     docs = []
     for path in sorted(folder.glob("*")) if folder.is_dir() else []:
-        if path.suffix.lower() not in (".md", ".txt") or path.name.lower() == "readme.md":
+        if path.suffix.lower() not in (".md", ".txt", ".jsonl") or path.name.lower() == "readme.md":
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
+        if path.suffix.lower() == ".jsonl":
+            for n, line in enumerate(text.splitlines(), 1):
+                try:
+                    record = json.loads(line) if line.strip() else None
+                except ValueError:
+                    record = None                 # a line that is not JSON is skipped, not fatal
+                if not isinstance(record, dict) or not str(record.get("text") or "").strip():
+                    continue
+                meta = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
+                key = str(record.get("id") or n)
+                d = doc("reference", f"{path.name}#{key}", str(meta.get("title") or key), str(record["text"]))
+                d["case_id"] = meta.get("case_id")
+                d["note"] = str(meta.get("kind") or "")
+                docs.append(d)
+            continue
         name, heading, section, n = path.stem.replace("-", " ").replace("_", " "), "", [], 0
         sections = []
         for line in text.splitlines():

@@ -1,96 +1,129 @@
-"""Test cases: a typhoon first, then the interruptions that follow.
+"""The test cases: which pole should the one truck go to next?
 
-A case is one JSON file in backend/cases/. It lists stages in the order they happen. Each stage
-says what is really damaged (the app keeps that hidden, as in a real event), and optionally who
-reports and which hazards are reported; anything left out is simulated from the damage.
+They live in backend/cases/meralco_demo.sqlite. That file is opened read-only and never changed:
+it is copied into memory when first needed, and everything below reads the copy.
 
-    {
-      "name": "Typhoon, then two interruptions",
-      "description": "optional, one line",
-      "stages": [
-        {"name": "Typhoon Dalisay", "kind": "typhoon", "damaged": ["LS-07", "L2", "T-03"],
-         "hazards": {"mey-malhacan": "live_wire"}},
-        {"name": "Interruption in Bacoor", "kind": "interruption", "damaged": ["T-07"],
-         "reports": {"bac-talaba": 14, "bac-niog": 9}, "seed": 4}
-      ]
-    }
+    scenarios   one row per case: title, setup, and the expected action (DISPATCH to a pole, or HOLD)
+    pole_jobs   the jobs waiting in each case: facility, customer tier, safe or unsafe, flood status,
+                customers the repair restores, linked outage reports, driving ETA
+    tiers       1 Critical, 2 Community services, 3 Residential
+    ranked_jobs, dispatch_results
+                views that apply the written policy in plain SQL. Their answer is used as a
+                cross-check on Liwa's, and as the fallback when Claude cannot be reached.
 
-    damaged   1 to 3 equipment ids from network.py (required)
-    kind      "typhoon" or "interruption" (default "interruption" after the first stage)
-    hazards   barangay id -> live_wire | fire | pole_down. Leave the key out to let the simulation decide; {} means none.
-    reports   barangay id -> people reporting. Leave out to simulate from the damage.
-    seed      any whole number; the same seed gives the same simulated messages (default 1)
+backend/cases/extra_poles.json adds more poles to each case, so that there is more to rank. Those
+rows go into the copy only, pass the table's own checks, and are chosen so that no expected answer
+changes. FIRSTLOOK_EXTRA_POLES=off (or deleting the file) runs the cases exactly as supplied.
 
-Loading a stage starts it fresh: the earlier stage's results are not carried over.
+The expected answer is shown on screen next to Liwa's and is never given to her.
 """
 from __future__ import annotations
 
 import json
+import os
+import sqlite3
+import threading
 from pathlib import Path
 
-from .config import CONFIG
-from .network import AREAS, ASSETS
+DB = Path(os.environ.get("FIRSTLOOK_CASES") or Path(__file__).resolve().parent.parent / "cases" / "meralco_demo.sqlite")
+_extra_setting = os.environ.get("FIRSTLOOK_EXTRA_POLES", "")
+EXTRA: Path | None = None if _extra_setting == "off" else Path(_extra_setting) if _extra_setting else DB.parent / "extra_poles.json"
 
-FOLDER = Path(__file__).resolve().parent.parent / "cases"
-KINDS = ("typhoon", "interruption")
-HAZARDS = ("live_wire", "fire", "pole_down")
+_lock = threading.RLock()
+_copy: sqlite3.Connection | None = None
+_added: set[tuple[str, str]] = set()          # (case_id, pole_id) of the rows that came from extra_poles.json
+_equipment: dict[tuple[str, str], str] = {}   # what kind of equipment an added job is on; a supplied job is a pole
+EQUIPMENT = ("pole", "transformer", "line")
+COLUMNS = ("pole_id", "facility_label", "tier", "safety", "status", "customers_restored", "report_count",
+           "eta_seconds", "distance_meters", "work_type", "flood_status", "scope_note")
+DEFAULTS = {"safety": "safe", "status": "pending", "eta_seconds": None, "distance_meters": None,
+            "work_type": "restore", "flood_status": "clear", "scope_note": None}
 
 
-def _check(path: Path) -> dict:
-    """Read one case file and make sure the app can run it. Raises ValueError naming what is wrong."""
+def available() -> bool:
+    return DB.is_file()
+
+
+def _add_extra(con: sqlite3.Connection) -> None:
+    _added.clear()
+    _equipment.clear()
+    if EXTRA is None or not EXTRA.is_file():
+        return
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except ValueError as e:
-        raise ValueError(f"not valid JSON ({e})") from e
-    assets, areas = {a.id for a in ASSETS}, {a.id for a in AREAS}
-    if not isinstance(data, dict) or not isinstance(data.get("stages"), list) or not data["stages"]:
-        raise ValueError('needs a "stages" list with at least one stage')
-    stages = []
-    for n, stage in enumerate(data["stages"], 1):
-        where = f"stage {n}"
-        if not isinstance(stage, dict):
-            raise ValueError(f"{where} must be an object")
-        damaged = stage.get("damaged")
-        if not isinstance(damaged, list) or not 1 <= len(set(damaged)) <= CONFIG.max_faults:
-            raise ValueError(f'{where}: "damaged" must list 1 to {CONFIG.max_faults} equipment ids')
-        unknown = [a for a in damaged if a not in assets]
-        if unknown:
-            raise ValueError(f"{where}: unknown equipment {', '.join(map(str, unknown))}")
-        kind = stage.get("kind", "typhoon" if n == 1 else "interruption")
-        if kind not in KINDS:
-            raise ValueError(f'{where}: "kind" must be one of {", ".join(KINDS)}')
-        out = {"name": str(stage.get("name") or f"Stage {n}"), "kind": kind, "damaged": sorted(set(damaged)),
-               "seed": int(stage.get("seed", 1))}
-        if "hazards" in stage:
-            bad = [k for k, v in stage["hazards"].items() if k not in areas or v not in HAZARDS]
-            if bad:
-                raise ValueError(f"{where}: hazards must map a barangay id to one of {', '.join(HAZARDS)} (check {', '.join(bad)})")
-            out["hazards"] = dict(stage["hazards"])
-        if "reports" in stage:
-            bad = [k for k, v in stage["reports"].items() if k not in areas or not isinstance(v, int) or v < 0]
-            if bad:
-                raise ValueError(f"{where}: reports must map a barangay id to a whole number of people (check {', '.join(bad)})")
-            out["reports"] = dict(stage["reports"])
-        stages.append(out)
-    return {"id": path.stem, "name": str(data.get("name") or path.stem), "description": str(data.get("description") or ""), "stages": stages}
+        poles = json.loads(EXTRA.read_text(encoding="utf-8")).get("poles", {})
+    except (ValueError, OSError, AttributeError):
+        return
+    known = {r[0] for r in con.execute("SELECT case_id FROM scenarios")}
+    for case_id, rows in poles.items():
+        for row in rows if case_id in known and isinstance(rows, list) else []:
+            try:
+                values = [case_id] + [row[c] if c in row else DEFAULTS[c] for c in COLUMNS]
+                con.execute(f"INSERT INTO pole_jobs (case_id, {', '.join(COLUMNS)}) VALUES ({', '.join('?' * (len(COLUMNS) + 1))})", values)
+                _added.add((case_id, row["pole_id"]))
+                if row.get("equipment") in EQUIPMENT:
+                    _equipment[(case_id, row["pole_id"])] = row["equipment"]
+            except (KeyError, TypeError, sqlite3.Error):
+                continue                      # a row the table's own checks refuse is left out
+    con.commit()
 
 
-def load_all(folder: Path = FOLDER) -> tuple[list[dict], list[str]]:
-    """Every usable case, and a plain message for each file that could not be used."""
-    cases, errors = [], []
-    for path in sorted(folder.glob("*.json")) if folder.is_dir() else []:
-        try:
-            cases.append(_check(path))
-        except ValueError as e:
-            errors.append(f"{path.name}: {e}")
-    return cases, errors
+def _open() -> sqlite3.Connection:
+    """The working copy, in memory. The file on disk is only ever read."""
+    global _copy
+    with _lock:
+        if _copy is None:
+            source = sqlite3.connect(f"file:{DB.as_posix()}?mode=ro", uri=True)
+            copy = sqlite3.connect(":memory:", check_same_thread=False)
+            try:
+                source.backup(copy)
+            finally:
+                source.close()
+            copy.row_factory = sqlite3.Row
+            copy.execute("PRAGMA foreign_keys = ON")           # an added row must name a real case and a real tier
+            _add_extra(copy)
+            _copy = copy
+        return _copy
 
 
-def find(case_id: str, folder: Path = FOLDER) -> dict | None:
-    return next((c for c in load_all(folder)[0] if c["id"] == case_id), None)
+def reload() -> None:
+    """Forget the working copy; the next read starts again from the file."""
+    global _copy
+    with _lock:
+        if _copy is not None:
+            _copy.close()
+        _copy = None
 
 
-def summary(case: dict, stage: int | None = None) -> dict:
-    """What the screen needs: names only. What is damaged stays hidden."""
-    return {"id": case["id"], "name": case["name"], "description": case["description"], "stage": stage,
-            "stages": [{"name": s["name"], "kind": s["kind"]} for s in case["stages"]]}
+def tiers() -> dict[int, str]:
+    with _lock:
+        return {r["tier"]: r["name"] for r in _open().execute("SELECT tier, name FROM tiers ORDER BY tier")}
+
+
+def all_cases() -> list[dict]:
+    """Every case with its jobs, the expected answer, and what the database's own rule says."""
+    if not available():
+        return []
+    with _lock:
+        con = _open()
+        names = {r["tier"]: r["name"] for r in con.execute("SELECT tier, name FROM tiers")}
+        rule = {r["case_id"]: r for r in con.execute("SELECT case_id, action, pole_id FROM dispatch_results")}
+        order: dict[str, list[str]] = {}
+        for r in con.execute("SELECT case_id, pole_id FROM ranked_jobs ORDER BY case_id, dispatch_rank, pole_id"):
+            order.setdefault(r["case_id"], []).append(r["pole_id"])
+        jobs: dict[str, list[dict]] = {}
+        for r in con.execute("SELECT * FROM pole_jobs ORDER BY case_id, tier, pole_id"):
+            j = dict(r)
+            case_id = j.pop("case_id")
+            j["tier_name"] = names.get(j["tier"], f"Tier {j['tier']}")
+            j["extra"] = (case_id, j["pole_id"]) in _added
+            j["equipment"] = _equipment.get((case_id, j["pole_id"]), "pole")
+            jobs.setdefault(case_id, []).append(j)
+        return [{
+            "id": s["case_id"], "title": s["title"], "setup": s["setup"], "jobs": jobs.get(s["case_id"], []),
+            "expected": {"action": s["expected_action"], "pole_id": s["expected_pole_id"], "reason": s["expected_reason"]},
+            "rule": {"action": rule[s["case_id"]]["action"], "pole_id": rule[s["case_id"]]["pole_id"], "order": order.get(s["case_id"], [])},
+        } for s in con.execute("SELECT * FROM scenarios ORDER BY case_id")]
+
+
+def find(case_id: str) -> dict | None:
+    return next((c for c in all_cases() if c["id"] == case_id), None)

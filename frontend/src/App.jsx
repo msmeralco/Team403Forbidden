@@ -1,62 +1,20 @@
+// FirstLook. The app opens on the typhoon; once it has passed, the power interruptions (the test
+// cases) appear as pins and as a list. Opening one shows the zone around it, the infrastructure
+// inside, the order Liwa ranks it in, and the crew's ETA from the nearest Meralco office.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { api } from './api'
 import MapView from './map/MapView'
 import { NETWORK_NOTE, OFFICE_NOTE } from './map/GridLayer'
-import { meterBlock, upstream } from './map/network'
+import { EQUIPMENT_ICON, EQUIPMENT_NAME, layout as caseLayout, ranking } from './map/cases'
 import Panel from './panel/Panel'
 import Assistant from './assistant/Assistant'
 import TyphoonPanel from './typhoon/TyphoonPanel'
 import { makeTrack } from './typhoon/track'
 import { Mark, Meralco, Wordmark } from './Logo'
-import { TIERS } from './theme'
-import { Bell, Close, Landmark, Office, Pause, People, Play, Pylon } from './icons'
+import { Alert, Bell, Close, Landmark, Office, Pylon } from './icons'
 
-const RESULT = {
-  damaged: ['damage found', 'bad'],
-  intact: ['no damage', 'good'],
-  inconclusive: ["couldn't confirm", 'warn'],
-}
-
-// Turns a change between two storm states into plain-language notifications.
-function describeChanges(prev, next) {
-  if (next.event.id !== prev.event.id) {
-    return { reset: true, notes: [{ tone: 'info', title: 'New storm loaded', body: `${next.summary.reports} messages from ${next.summary.people} people. Start with the top of the list.` }] }
-  }
-  const notes = []
-  next.log.slice(0, next.log.length - prev.log.length).reverse().forEach((o) => {
-    const [label, tone] = RESULT[o.result]
-    notes.push({ tone, title: `${o.asset_name}: ${label}`, body: `Reported by ${o.by}`, field: true })
-  })
-  next.areas.forEach((a) => {
-    const before = prev.areas.find((p) => p.id === a.id)
-    if (before?.hazard_open && !a.hazard_open) notes.push({ tone: 'good', title: `Made safe: Brgy. ${a.barangay}`, body: `By ${a.hazard_handled_by}` })
-  })
-  next.areas.forEach((a) => {
-    const before = prev.areas.find((p) => p.id === a.id)
-    if (before && !before.hazard_open && a.hazard_open && !before.hazard_handled_by) {
-      notes.push({ tone: 'bad', title: `Safety hazard: Brgy. ${a.barangay}`, body: `${Object.keys(a.hazards)[0]}, ${a.city}` })
-    }
-  })
-  if (prev.ai.status === 'reading' && next.ai.status === 'done') {
-    notes.push({ tone: 'info', title: 'The AI reader has finished', body: next.ai.caught_reports ? `It caught ${next.ai.caught_reports} messages the keyword rules missed.` : 'It found nothing the keyword rules missed.' })
-  }
-  next.repaired.forEach((x) => {
-    if (prev.repaired.some((p) => p.asset_id === x.asset_id)) return
-    const back = x.back.map((n) => n.split(',')[0]).join(', ')
-    const dark = x.still_dark.map((n) => n.split(',')[0]).join(', ')
-    notes.push({ tone: dark ? 'warn' : 'good', title: `Repaired: ${x.name}`, body: dark ? `Power back in ${back || 'no barangays yet'}. Still dark: ${dark}. Another break is likely.` : `Power back in ${back}.`, field: true })
-  })
-  if (next.resources.identified && !prev.resources.identified) {
-    notes.push({ tone: 'good', title: 'Damage pinned down', body: `${next.resources.top_label}. See Damage found.` })
-  } else {
-    const top = next.recommendations[0]
-    if (top && top.tier !== 'low' && prev.recommendations[0] && top.asset_id !== prev.recommendations[0].asset_id) {
-      notes.push({ tone: 'accent', title: 'New top priority', body: `${top.name}, ${top.place}` })
-    }
-  }
-  return { reset: false, notes }
-}
+const NONE = []
 
 function useIsMobile() {
   const query = '(max-width: 820px)'
@@ -70,25 +28,40 @@ function useIsMobile() {
   return mobile
 }
 
-const KEY_GROUPS = [
-  ['Where to check', ['critical', 'high', 'medium', 'low']],
-  ['What we know', ['confirmed', 'unknown', 'restored']],
-]
-
-function Legend({ layers, network }) {
+// The map key. It folds away while an interruption is open so it does not cover the zone.
+function Legend({ layers, zone, folded }) {
   const [open, setOpen] = useState(true)
+  useEffect(() => { setOpen(!folded) }, [folded])
   return (
     <div className={`map-key${open ? '' : ' closed'}`}>
       <button className="legend-toggle" onClick={() => setOpen((o) => !o)} aria-expanded={open}>{open ? 'Hide key' : 'Map key'}</button>
       {open && (
         <div className="key-body">
-          {KEY_GROUPS.map(([title, tiers]) => (
-            <section key={title}>
-              <h4>{title}</h4>
-              <ul>{tiers.map((t) => <li key={t}><i className={`dot t-${t}`}>{t === 'unknown' ? '?' : t === 'restored' ? '✓' : '!'}</i>{TIERS[t].label}</li>)}</ul>
+          <section>
+            <h4>Power interruptions</h4>
+            <ul>
+              <li><i className="dot t-critical">!</i>Critical customers</li>
+              <li><i className="dot t-high">!</i>Community services</li>
+              <li><i className="dot t-medium">!</i>Residential</li>
+            </ul>
+            <p className="lg-note">The number beside a pin is how many outage reports are linked to it.</p>
+          </section>
+          {zone && (
+            <section>
+              <h4>Inside the zone</h4>
+              <ul>
+                <li><i className="lg-num first">1</i>Check first</li>
+                <li><i className="lg-num">2</i>Next, in order</li>
+                <li><i className="lg-num hold">II</i>On hold</li>
+                <li><i className="lg-num done">✓</i>Resolved</li>
+                {Object.keys(EQUIPMENT_NAME).map((kind) => (
+                  <li key={kind}><svg className="lg-mark" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d={EQUIPMENT_ICON[kind]} /></svg>{EQUIPMENT_NAME[kind]}</li>
+                ))}
+                <li><i className="lg-road" />Crew&rsquo;s road route</li>
+              </ul>
             </section>
-          ))}
-          {network && (
+          )}
+          {layers.grid && (
             <section>
               <h4>Power network</h4>
               <ul>
@@ -96,16 +69,6 @@ function Legend({ layers, network }) {
                 <li><i className="lg-line" style={{ borderTopWidth: 4 }} />Main line</li>
                 <li><i className="lg-line" style={{ borderTopWidth: 2 }} />Branch line</li>
                 <li><i className="lg-eq lg-tx" />Transformer</li>
-              </ul>
-            </section>
-          )}
-          {network && (
-            <section>
-              <h4>kWh meters</h4>
-              <ul>
-                <li><i className="lg-meter on" />Has power</li>
-                <li><i className="lg-meter dark" />Likely no power</li>
-                <li><i className="lg-meter told" />Reported no power</li>
               </ul>
               <p className="lg-note">{NETWORK_NOTE}</p>
             </section>
@@ -123,40 +86,18 @@ function Legend({ layers, network }) {
   )
 }
 
-function Drawer({ open, onClose, playing, setPlaying, run, basemap, onReplay }) {
-  const [cases, setCases] = useState(null)       // test cases found in backend/cases
-  useEffect(() => {
-    if (open) api.cases().then(setCases).catch(() => setCases({ cases: [], errors: ['The list of test cases could not be loaded.'] }))
-  }, [open])
+function Drawer({ open, onClose, basemap, onReplay }) {
   if (!open) return null
   return (
     <div className="drawer-wrap" onClick={onClose}>
       <nav className="drawer" onClick={(e) => e.stopPropagation()} aria-label="Menu">
         <div className="drawer-head"><Wordmark /><button className="icon-btn" onClick={onClose} aria-label="Close menu"><Close size={16} /></button></div>
         <div className="drawer-group">
-          <h4>Test cases</h4>
-          {cases?.cases.map((c) => (
-            <button key={c.id} className="drawer-item" onClick={() => { setPlaying(false); run(() => api.loadStage(c.id, 1)); onClose() }}>
-              <strong>{c.name}</strong>
-              <span>{c.stages.map((s) => s.name).join(', then ')}</span>
-            </button>
-          ))}
-          {cases && cases.cases.length === 0 && <p className="drawer-note muted small">None yet. Put case files in backend/cases.</p>}
-          {cases?.errors.map((e) => <p key={e} className="drawer-note small warn-text">{e}</p>)}
-        </div>
-        <div className="drawer-group">
-          <h4>Demo controls</h4>
-          <button className="drawer-item" onClick={() => { setPlaying((p) => !p); onClose() }}>
-            <strong>{playing ? <><Pause size={13} /> Pause the demo</> : <><Play size={13} /> Play the demo</>}</strong>
-            <span>Simulates field results and repairs, step by step, until every barangay has power</span>
-          </button>
-          <button className="drawer-item" onClick={() => { setPlaying(false); onReplay(); onClose() }}><strong>Replay the typhoon</strong><span>Shows the storm crossing Luzon again, on a new track</span></button>
-          <button className="drawer-item" onClick={() => { setPlaying(false); run(() => api.reset(null)); onClose() }}><strong>Restart the demo storm</strong><span>Same storm, nothing checked yet</span></button>
-          <button className="drawer-item" onClick={() => { setPlaying(false); run(() => api.reset(Math.floor(Math.random() * 1e6))); onClose() }}><strong>Load a random storm</strong><span>New damage, new reports</span></button>
+          <button className="drawer-item" onClick={() => { onReplay(); onClose() }}><strong>Replay the typhoon</strong><span>Shows the storm crossing Luzon again, on a new track</span></button>
         </div>
         <p className="drawer-foot muted small">
           {basemap === 'google' ? 'Map: Google Maps.' : 'Map: free OpenStreetMap map. Add a Google Maps key to frontend/.env.local to switch.'}
-          {' '}All storm data is invented for this demo; place names are real.
+          {' '}The storm and the interruptions are invented for this demo; place names are real.
         </p>
         <div className="drawer-brand"><Meralco /></div>
       </nav>
@@ -165,180 +106,118 @@ function Drawer({ open, onClose, playing, setPlaying, run, basemap, onReplay }) 
 }
 
 export default function App() {
-  const [state, setState] = useState(null)
-  const [reports, setReports] = useState([])
+  const [state, setState] = useState(null)              // the service area: barangays and the power network
   const [error, setError] = useState(null)
-  // The app opens on the typhoon itself. Outages only exist once it has passed.
+  // The app opens on the typhoon itself. Interruptions only exist once it has passed.
   const [phase, setPhase] = useState('before')          // before | passing | after
   const [trackSeed, setTrackSeed] = useState(() => Math.floor(Math.random() * 1e9))
   const [tick, setTick] = useState(null)                // where the storm is while it passes
-  const [pathView, setPathView] = useState(null)        // barangay whose houses and meters are framed up close
-  const [zoneKm, setZoneKm] = useState(2)               // radius of the zone around an opened case; null = its whole supply path
-  const [stack, setStack] = useState([])
-  const [tab, setTab] = useState('check')
-  const [layers, setLayers] = useState({ reports: true, landmarks: false, grid: false, offices: false })
+  const [cases, setCases] = useState([])                // the interruptions, each with Liwa's decision once made
+  const [offices, setOffices] = useState([])            // Meralco offices on the map: the crew comes from the nearest one
+  const [caseBusy, setCaseBusy] = useState(null)        // id of the interruption being ranked
+  const [caseError, setCaseError] = useState(null)
+  const [runningAll, setRunningAll] = useState(false)
+  const [lastDecision, setLastDecision] = useState(null)
+  const [sel, setSel] = useState(null)                  // the open interruption: { kind: 'case', id }
+  const [resolved, setResolved] = useState({})          // per interruption: the poles marked resolved on screen
+  const [picked, setPicked] = useState(null)            // the pole whose route was asked for; none = the first in the order
+  const [route, setRoute] = useState(null)              // where the drawn route came from: loading | google | osm | none
+  const [told, setTold] = useState({})                  // per interruption: what customers reported
+  const [layers, setLayers] = useState({ cases: true, landmarks: false, grid: false, offices: false })
   const [menu, setMenu] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
   const [notes, setNotes] = useState([])
   const [toasts, setToasts] = useState([])
   const [unread, setUnread] = useState(0)
-  const [playing, setPlaying] = useState(false)
   const [basemap, setBasemap] = useState(null)
   const [sheet, setSheet] = useState(false)
   const mobile = useIsMobile()
-  const previous = useRef(null)
-  const latest = useRef(null)
   const counter = useRef(0)
-  const inFlight = useRef(false)
-  const gridTold = useRef(false)
+  const officesTold = useRef(false)
 
-  const sel = stack[stack.length - 1] ?? null
-  const open = useCallback((s) => {
-    setStack((st) => {
-      const top = st[st.length - 1]
-      if (top && top.kind === s.kind && top.id === s.id) return st
-      return [...st.slice(-15), s]
-    })
-    setSheet(true)
-  }, [])
-  const back = () => setStack((st) => st.slice(0, -1))
-  const close = () => setStack([])
+  const open = useCallback((s) => { setSel(s); setPicked(null); setSheet(true); setCaseError(null) }, [])
+  const close = () => setSel(null)
 
-  const toast = useCallback((found, reset = false) => {
+  const toast = useCallback((found) => {
     const time = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     const stamped = found.map((n) => ({ ...n, id: ++counter.current, time }))
-    setNotes((old) => [...stamped.slice().reverse(), ...(reset ? [] : old)].slice(0, 30))
-    setUnread((u) => (reset ? 0 : u) + stamped.length)
+    setNotes((old) => [...stamped.slice().reverse(), ...old].slice(0, 30))
+    setUnread((u) => u + stamped.length)
     setToasts((old) => [...old, ...stamped].slice(-3))
     stamped.forEach((n) => setTimeout(() => setToasts((old) => old.filter((t) => t.id !== n.id)), 6000))
   }, [])
 
-  // Runs an API call; any response that carries the storm state refreshes the screen.
-  const run = useCallback(async (fn) => {
-    try {
-      const data = await fn()
-      if (data?.assets) setState(data)
-      else if (data?.state) setState(data.state)
-      setError(null)
-      return data
-    } catch (e) {
-      setError(e.message)
-      return null
-    }
+  useEffect(() => {
+    api.state().then(setState).catch((e) => setError(e.message))
+    fetch(`${import.meta.env.BASE_URL}grid/meralco-osm.json`).then((r) => r.json()).then((d) => setOffices(d.offices ?? [])).catch(() => {})
+    api.cases().then((d) => setCases(d.cases)).catch((e) => setError(e.message))
   }, [])
-
-  const reading = state?.ai.status === 'reading'
-  useEffect(() => {
-    run(api.state)
-    // Keeps every open screen in step; quicker while the AI reader is still working.
-    const timer = setInterval(() => run(api.state), reading ? 1500 : 5000)
-    return () => clearInterval(timer)
-  }, [run, reading])
-
-  const eventId = state?.event.id
-  const reportCount = state?.summary.reports
-  useEffect(() => { setStack([]); setTab('check') }, [eventId])
-  // Reload the feed when a storm starts or new messages arrive (e.g. after a repair).
-  useEffect(() => {
-    if (!eventId) return
-    api.reports().then((d) => setReports(d.reports)).catch((e) => setError(e.message))
-  }, [eventId, reportCount, state?.ai.read, state?.ai.photos, state?.ai.caught_reports])
-
-  useEffect(() => {
-    latest.current = state
-    const prev = previous.current
-    previous.current = state
-    if (!state || !prev) return
-    const { reset, notes: found } = describeChanges(prev, state)
-    if (found.length) toast(found, reset)
-  }, [state, toast])
-
-  // Demo: field results come in for the top place until the damage is pinned down, then
-  // repairs happen one at a time; if an area stays dark, checking resumes.
-  useEffect(() => {
-    if (!playing) return undefined
-    const step = async () => {
-      const s = latest.current
-      if (!s || inFlight.current) return
-      const top = s.recommendations.find((r) => r.tier !== 'low')
-      const ready = s.handoff.find((h) => !h.blocked_by.length)
-      const dark = s.areas.some((a) => a.p_out >= 0.5)
-      inFlight.current = true
-      try {
-        if (!s.resources.identified && top) {
-          setTab('check'); setStack([{ kind: 'priority', id: top.asset_id }])
-          await run(() => api.observe(top.asset_id, null))
-        } else if (ready) {
-          setTab('found'); setStack([])
-          await run(() => api.repair(ready.asset_id, 'Repair team (demo)'))
-        } else if (dark && top) {
-          setTab('check'); setStack([{ kind: 'priority', id: top.asset_id }])
-          await run(() => api.observe(top.asset_id, null))
-        } else {
-          setPlaying(false); setTab('found'); setStack([])
-        }
-      } finally {
-        inFlight.current = false
-      }
-    }
-    step()
-    const timer = setInterval(step, 2800)
-    return () => clearInterval(timer)
-  }, [playing, run])
-
-  const focus = useMemo(() => {
-    if (!state || !sel) return null
-    if (sel.kind === 'priority') {
-      const a = state.assets.find((x) => x.id === sel.id)
-      const rec = state.recommendations.find((r) => r.asset_id === sel.id)
-      const pts = [a.pos, ...(rec?.covers.areas ?? []).map((c) => state.areas.find((x) => x.id === c.id).pos)]
-      return pts.length > 1 ? { key: `p-${sel.id}`, bounds: L.latLngBounds(pts) } : { key: `p-${sel.id}`, pos: a.pos, zoom: 13 }
-    }
-    if (sel.kind === 'area') {
-      // Frame the whole path that feeds the barangay, from the substation down; or, on request, just its houses and meters.
-      const area = state.areas.find((x) => x.id === sel.id)
-      const chain = upstream(state, area.transformer)
-      const houses = pathView === sel.id
-      if (!houses && zoneKm) return { key: `a-${sel.id}-zone-${zoneKm}`, bounds: L.latLng(area.pos).toBounds(zoneKm * 2100), maxZoom: 16 }
-      const far = houses ? [] : [...chain.map((x) => x.pos), state.substation.pos]
-      return { key: `a-${sel.id}-${houses}`, bounds: L.latLngBounds([...meterBlock(area).corner, ...far]), maxZoom: houses ? 17.75 : 15 }
-    }
-    const r = reports.find((x) => x.id === sel.id)
-    return r ? { key: `r-${sel.id}`, pos: r.pos, zoom: 15 } : null
-  }, [sel?.kind, sel?.id, state?.event.id, reports.length, pathView, zoneKm]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const allClear = state?.event.all_clear
   const track = useMemo(() => (allClear ? makeTrack(trackSeed, allClear) : null), [trackSeed, allClear])
-  const intro = phase !== 'after' && Boolean(track) && state?.event.kind === 'typhoon'     // an interruption has no typhoon to show
+  const intro = phase !== 'after' && Boolean(track)
   const replay = useCallback(() => {
-    setTrackSeed(Math.floor(Math.random() * 1e9)); setTick(null); setStack([]); setPhase('before')
+    setTrackSeed(Math.floor(Math.random() * 1e9)); setTick(null); setSel(null); setResolved({}); setPhase('before')
   }, [])
+  const count = cases.length
   const reveal = useCallback(() => {
     setPhase('after'); setTick(null)
-    const s = latest.current
-    if (s) toast([{ tone: 'info', title: `${s.event.name} has passed`, body: `${s.summary.reports} messages from ${s.summary.people} people so far. Start with number 1.` }])
-  }, [toast])
-  // The first stage of a test case is a typhoon: show it arriving before its outages.
-  const caseStage = state?.case ? `${state.case.id}-${state.case.stage}-${state.event.id}` : null
-  useEffect(() => { if (state?.case?.stage === 1 && state.event.kind === 'typhoon') replay() }, [caseStage]) // eslint-disable-line react-hooks/exhaustive-deps
+    toast([{ tone: 'info', title: 'The typhoon has passed', body: `${count} power interruptions are waiting. Open one to see what to check first.` }])
+  }, [toast, count])
+
+  // Liwa ranks an interruption when it is opened.
+  const decideCase = useCallback(async (id, force = false) => {
+    setCaseBusy(id); setCaseError(null)
+    try {
+      const decision = await api.caseDecision(id, force)
+      setCases((list) => list.map((c) => (c.id === id ? { ...c, decision } : c)))
+      setLastDecision(decision)
+    } catch (e) {
+      setCaseError(e.message)
+    }
+    setCaseBusy(null)
+  }, [])
+  const runAllCases = async () => {
+    setRunningAll(true)
+    for (const c of cases) await decideCase(c.id, true)      // one at a time: each is a call to Claude
+    setRunningAll(false)
+  }
+  const openCase = sel ? cases.find((c) => c.id === sel.id) : null
+  // One ranking for the map and the panel. Resolving a pole takes it out, and the next one becomes the first.
+  const done = openCase ? resolved[openCase.id] ?? NONE : NONE
+  const rank = openCase ? ranking(openCase, done) : null
+  const active = rank ? (rank.go.find((j) => j.pole_id === picked) ?? rank.go[0])?.pole_id ?? null : null
+  const resolve = (id, pole) => { setResolved((r) => ({ ...r, [id]: [...(r[id] ?? []), pole] })); setPicked(null) }
+  const undo = (id, pole) => { setResolved((r) => ({ ...r, [id]: (r[id] ?? []).filter((p) => p !== pole) })); setPicked(null) }
+  useEffect(() => {
+    if (openCase && !openCase.decision && !caseBusy) decideCase(openCase.id)
+    if (openCase && !told[openCase.id]) api.caseReports(openCase.id).then((d) => setTold((t) => ({ ...t, [d.case_id]: d }))).catch(() => {})
+  }, [openCase?.id]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Where the map looks: every interruption at once, or the open one's zone together with the office the crew comes from.
+  const focus = useMemo(() => {
+    if (!state || phase !== 'after' || !cases.length) return null
+    if (!sel) return { key: 'all', bounds: L.latLngBounds(state.areas.map((a) => a.pos)), maxZoom: 12 }
+    const index = cases.findIndex((c) => c.id === sel.id)
+    if (index < 0) return null
+    const plan = caseLayout(cases[index], index, state.areas, offices)
+    const bounds = L.latLng(plan.center).toBounds(plan.radius * 2.15)
+    if (plan.office && plan.office.km < 9) bounds.extend(plan.office.pos)
+    return { key: `c-${sel.id}-${offices.length}`, bounds, maxZoom: 15.5 }
+  }, [sel?.id, phase, cases.length, offices.length, Boolean(state)]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!state) {
-    return <div className="boot"><Mark size={44} /><p>{error ? `Can't reach the FirstLook server. Start the backend on port 8000, then reload. (${error})` : 'Loading the storm picture…'}</p></div>
+    return <div className="boot"><Mark size={44} /><p>{error ? `Can't reach the FirstLook server. Start the backend on port 8000, then reload. (${error})` : 'Loading…'}</p></div>
   }
 
   const toggle = (k) => {
-    // Say once where the grid picture comes from, so nobody takes it for Meralco's own map.
-    if (k === 'offices' && !layers[k] && !gridTold.current) {
-      gridTold.current = true
-      toast([{ tone: 'info', title: 'Showing Meralco offices', body: OFFICE_NOTE, quiet: true }])
+    if (k === 'offices' && !layers[k] && !officesTold.current) {
+      officesTold.current = true
+      toast([{ tone: 'info', title: 'Showing Meralco offices', body: OFFICE_NOTE }])
     }
     setLayers((l) => ({ ...l, [k]: !l[k] }))
   }
-  const chips = [
-    ['reports', 'Reports', People],
-    ['landmarks', 'Landmarks', Landmark],
-    ['grid', 'Meralco grid', Pylon], ['offices', 'Meralco offices', Office],
-  ]
+  const chips = [['cases', 'Interruptions', Alert], ['landmarks', 'Landmarks', Landmark], ['grid', 'Meralco grid', Pylon], ['offices', 'Meralco offices', Office]]
 
   return (
     <div className={`app${mobile ? ' mobile' : ''}`}>
@@ -353,41 +232,40 @@ export default function App() {
         ))}
       </div>
 
-      <>
-          <MapView state={state} reports={reports} sel={sel} layers={layers} focus={focus} padLeft={420} mobile={mobile}
-            typhoon={intro ? { track, running: phase === 'passing', onTick: setTick, onDone: reveal } : null}
-            onSelectArea={(id) => open({ kind: 'area', id })}
-            onSelectPlace={(id) => open({ kind: 'priority', id })} zoneKm={zoneKm}
-            onSelectReport={(id) => open({ kind: 'report', id })}
-            onBasemap={setBasemap} onError={setError} />
-          {intro ? (
-            <TyphoonPanel name={state.event.name} track={track} running={phase === 'passing'} tick={tick}
-              onStart={() => setPhase('passing')} onSkip={reveal} />
-          ) : (
-            <>
-              <Panel state={state} reports={reports} sel={sel} open={open} back={back} close={close} tab={tab} setTab={setTab}
-                run={run} onMenu={() => setMenu(true)} sheet={sheet} setSheet={setSheet}
-                onShowPath={(id) => setPathView((v) => (v === id ? null : id))} pathShown={pathView} zoneKm={zoneKm} setZoneKm={(k) => { setZoneKm(k); setPathView(null) }} />
-              <div className="map-chips" role="group" aria-label="Map layers">
-                {chips.map(([k, label, Icon]) => (
-                  <button key={k} className={layers[k] ? 'mchip on' : 'mchip'} aria-pressed={layers[k]} onClick={() => toggle(k)}><Icon size={15} />{label}</button>
-                ))}
-              </div>
-              {!mobile && <Legend layers={layers} network={layers.grid || Boolean(sel && sel.kind !== 'report')} />}
-              <Assistant state={state} note={toasts[toasts.length - 1] ?? null} mobile={mobile} sheetOpen={sheet} onOpen={open} />
-            </>
-          )}
-      </>
+      <MapView state={state} layers={layers} focus={focus} padLeft={420} mobile={mobile}
+        typhoon={intro ? { track, running: phase === 'passing', onTick: setTick, onDone: reveal } : null}
+        cases={cases} offices={offices} openId={sel?.id ?? null} active={active} resolved={done}
+        onSelectCase={(id) => open({ kind: 'case', id })} onPickPole={setPicked} onRoute={setRoute}
+        onBasemap={setBasemap} onError={setError} />
+      {intro ? (
+        <TyphoonPanel name={state.event.name} track={track} running={phase === 'passing'} tick={tick}
+          onStart={() => setPhase('passing')} onSkip={reveal} />
+      ) : (
+        <>
+          <Panel state={state} cases={cases} offices={offices} sel={sel} open={open} back={close} close={close}
+            onMenu={() => setMenu(true)} sheet={sheet} setSheet={setSheet}
+            caseBusy={caseBusy} caseError={caseError} onDecideCase={decideCase}
+            rank={rank} active={active} route={route} told={openCase ? told[openCase.id] : null}
+            onPickPole={setPicked} onResolve={resolve} onUndo={undo} />
+          <div className="map-chips" role="group" aria-label="Map layers">
+            {chips.map(([k, label, Icon]) => (
+              <button key={k} className={layers[k] ? 'mchip on' : 'mchip'} aria-pressed={layers[k]} onClick={() => toggle(k)}><Icon size={15} />{label}</button>
+            ))}
+          </div>
+          {!mobile && <Legend layers={layers} zone={Boolean(sel)} folded={Boolean(sel)} />}
+          <Assistant cases={cases} busy={Boolean(caseBusy)} running={runningAll} lastDecision={lastDecision}
+            mobile={mobile} sheetOpen={sheet} onRunAll={runAllCases} />
+        </>
+      )}
 
       <div className="top-right">
-        {playing && <button className="btn sm live" onClick={() => setPlaying(false)}><Pause size={12} />Demo running</button>}
         <button className="icon-btn raised bell" onClick={() => { setNotesOpen((o) => !o); setUnread(0) }} aria-label={`Notifications, ${unread} new`}>
           <Bell />{unread > 0 && <span className="badge">{unread}</span>}
         </button>
         {notesOpen && (
           <div className="popover">
             <div className="pop-head"><strong>Notifications</strong><button className="icon-btn" onClick={() => setNotesOpen(false)} aria-label="Close notifications"><Close size={14} /></button></div>
-            {notes.length === 0 && <p className="muted">Nothing yet. Updates appear here as results come in from the field.</p>}
+            {notes.length === 0 && <p className="muted">Nothing yet.</p>}
             {notes.map((n) => (
               <div key={n.id} className="note-row">
                 <span className={`pip ${n.tone}`} />
@@ -399,8 +277,7 @@ export default function App() {
         )}
       </div>
 
-      <Drawer open={menu} onClose={() => setMenu(false)} playing={playing} setPlaying={setPlaying}
-        run={run} basemap={basemap} onReplay={replay} />
+      <Drawer open={menu} onClose={() => setMenu(false)} basemap={basemap} onReplay={replay} />
     </div>
   )
 }

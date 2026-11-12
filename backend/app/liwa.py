@@ -49,7 +49,8 @@ from pathlib import Path
 
 import numpy as np
 
-from . import knowledge
+from . import cases, knowledge
+from . import case_reports
 
 BACKEND = Path(__file__).resolve().parent.parent
 CACHE = BACKEND / ".cache"
@@ -59,7 +60,7 @@ EMBED_MODEL = "BAAI/bge-small-en-v1.5"
 CLAUDE_MODEL = os.environ.get("FIRSTLOOK_LIWA_MODEL", "claude-opus-5-5")
 CLAUDE_TIMEOUT = 90
 MAX_CANDIDATES = 8          # places Claude ranks; any beyond these keep the engine's order after them
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 GROUP = {"note": 0, "message": 1, "reference": 2}        # what a search looks through
 STOP = set("""a an the is are was were be been do does did can could would should will what when where which who why how
 any some there here this that these those it its of in on at to for from with about and or not no we you i me my our us they
@@ -79,6 +80,7 @@ CREATE TABLE IF NOT EXISTS doc (
     body       TEXT NOT NULL,
     link_kind  TEXT CHECK (link_kind IN ('area', 'priority', 'report')),
     link_id    TEXT,
+    case_id    TEXT,                      -- for a worked example: the test case it belongs to
     digest     TEXT NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (storm, kind, ref)
@@ -223,12 +225,12 @@ class Store:
                 db.execute("DELETE FROM doc_vec WHERE rowid = ?", (row,))
             db.executemany("DELETE FROM doc WHERE id = ?", [(row,) for row in gone])
             for row, d in changed:
-                db.execute("UPDATE doc SET title = ?, body = ?, link_kind = ?, link_id = ?, digest = ?, updated_at = datetime('now') WHERE id = ?",
-                           (d["title"], d["body"], d["link_kind"], d["link_id"], d["digest"], row))
+                db.execute("UPDATE doc SET title = ?, body = ?, link_kind = ?, link_id = ?, case_id = ?, digest = ?, updated_at = datetime('now') WHERE id = ?",
+                           (d["title"], d["body"], d["link_kind"], d["link_id"], d.get("case_id"), d["digest"], row))
             fresh = list(changed)
             for d in new:
-                cur = db.execute("INSERT INTO doc (storm, kind, ref, title, body, link_kind, link_id, digest) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                                 (scope, d["kind"], d["ref"], d["title"], d["body"], d["link_kind"], d["link_id"], d["digest"]))
+                cur = db.execute("INSERT INTO doc (storm, kind, ref, title, body, link_kind, link_id, case_id, digest) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                                 (scope, d["kind"], d["ref"], d["title"], d["body"], d["link_kind"], d["link_id"], d.get("case_id"), d["digest"]))
                 fresh.append((cur.lastrowid, d))
 
             # Vectors: reuse the cache by content hash, embed only what is truly new.
@@ -262,13 +264,14 @@ class Store:
         with self.lock:
             return self.db.execute("SELECT * FROM doc WHERE kind = ? AND ref = ?", (kind, ref)).fetchone()
 
-    def search(self, text: str, vector: np.ndarray, group: str = "note", k: int = 6) -> list[sqlite3.Row]:
+    def search(self, text: str, vector: np.ndarray, group: str = "note", k: int = 6, exclude_case: str | None = None) -> list[sqlite3.Row]:
         """Hybrid search within one group: 'note' (the storm's own records), 'message' (what
         residents wrote) or 'reference' (the reference documents).
 
         Rankings by meaning (vector distance) and by wording (BM25, title weighted 4x) are fused
         with reciprocal rank fusion, which needs no score calibration between them. Among the
-        storm's records, one whose own name is in the text (a barangay, a city, a place) counts double."""
+        storm's records, one whose own name is in the text (a barangay, a city, a place) counts double.
+        exclude_case leaves out the worked example of that test case, so a case is never answered from its own answer."""
         pool = max(k * 3, 12)
         kinds = {"note": "NOT IN ('message', 'reference')", "message": "= 'message'", "reference": "= 'reference'"}[group]
         with self.lock:
@@ -287,13 +290,15 @@ class Store:
             for weight, ranking in ((1.0, by_meaning), (1.0, by_wording), (2.0, by_name)):
                 for position, row in enumerate(ranking):
                     score[row] = score.get(row, 0.0) + weight / (60 + position)
-            best = sorted(score, key=lambda row: -score[row])[:k * 2]
+            best = sorted(score, key=lambda row: -score[row])[:k * 2 + 3]
             if not best:
                 return []
             rows = {r["id"]: r for r in self.db.execute(f"SELECT * FROM doc WHERE id IN ({','.join('?' * len(best))})", best)}
             out, seen = [], set()
             for row in best:                                # the same words stored twice count once
                 key = (rows[row]["body"], rows[row]["kind"])
+                if exclude_case and rows[row]["case_id"] == exclude_case:
+                    continue
                 if key not in seen:
                     seen.add(key)
                     out.append(rows[row])
@@ -508,6 +513,139 @@ def plan(session, force: bool = False) -> dict:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Test cases: where should the one truck go next?
+# ---------------------------------------------------------------------------
+DISPATCH_PROMPT = """You are Liwa, the dispatch planner inside FirstLook, a tool a power utility in the Philippines uses \
+after a typhoon. There is one truck and it handles one job at a time. Decide where the truck should go next, or whether it \
+should hold.
+
+HOW TO DECIDE
+- Follow the REFERENCE records. They are the utility's guidance for this decision; apply their checks in the order they give.
+- Use only the facts in CASE, JOBS and CUSTOMER REPORTS. Do not invent equipment, numbers or times.
+- CUSTOMER REPORTS are what people wrote about each job. Weigh them exactly as the reference records on customer reports say: \
+they are evidence, they are weighed lightly, and one report never moves a job. The number of linked reports is the figure in JOBS.
+- You recommend. A person sends the truck.
+- Write for someone who has never seen the ids. In "reason", "why" and "report_note" name a job by its equipment and what it serves \
+(for example "the hospital pole" or "the transformer at Residential area C"), never by its id, and say Critical, Community services or \
+Residential instead of a tier or level number.
+
+REFERENCE (retrieved from the reference database for this case)
+{references}
+
+CASE
+{setup}
+
+JOBS
+{jobs}
+
+CUSTOMER REPORTS (invented for this exercise; listed under the job each is linked to)
+{reports}
+
+Reply with only a JSON object, no markdown fences and no other text, in exactly this form:
+{{"action": "DISPATCH or HOLD", "pole_id": "the pole to send the truck to, or null when holding", "reason": "one or two plain sentences", \
+"order": [{{"pole_id": "a job the truck could do now", "why": "a few plain words on why it sits at this place"}}], \
+"held": [{{"pole_id": "a job that cannot be done now", "why": "a few words"}}], \
+"report_note": "at most two short plain sentences, 45 words in all: the one or two things in the customer reports that matter most for the crew (a hazard to confirm on arrival, someone who depends on power), then whether the reports changed the order", "refs": [1]}}
+"order" lists every job the truck could do now, best first. "refs" holds the numbers of the reference records you applied."""
+EXAMPLES = 3                                   # worked examples given beside the policy records
+_decisions: dict[str, dict] = {}
+USE_OWN_EXAMPLE = os.environ.get("FIRSTLOOK_USE_OWN_EXAMPLE", "") == "1"      # off: a case never sees its own worked example
+
+
+def _minutes(seconds) -> str:
+    return "not available" if seconds is None else f"{round(seconds / 60)} min"
+
+
+def _job_line(j: dict) -> str:
+    distance = "not given" if j["distance_meters"] is None else f"{j['distance_meters'] / 1000:g} km"
+    return (f"[{j['pole_id']}] {j['facility_label']}. Tier {j['tier']} ({j['tier_name']}). Safety: {j['safety']}. Status: {j['status']}. "
+            f"Equipment: {j.get('equipment', 'pole')}. "
+            f"Work: {j['work_type']}. Flood status: {j['flood_status'].replace('_', ' ')}. Customers the repair restores: {j['customers_restored']}. "
+            f"Linked outage reports: {j['report_count']}. Driving ETA: {_minutes(j['eta_seconds'])}. Distance: {distance}."
+            + (f" Note: {j['scope_note']}" if j["scope_note"] else ""))
+
+
+def decide(case_id: str, force: bool = False) -> dict:
+    """Liwa's recommendation for one test case, with the expected answer beside it."""
+    case = cases.find(case_id)
+    if case is None:
+        raise KeyError(f"No test case {case_id}")
+    started = time.perf_counter()
+    db, emb = store(), embedder()
+    db.sync("reference", knowledge.reference_docs(REFERENCE), emb)
+    jobs = case["jobs"]
+    by_id = {j["pole_id"]: j for j in jobs}
+    facts = " ".join(sorted({j["facility_label"] for j in jobs} | {f"{j['safety']} {j['work_type']} {j['flood_status'].replace('_', ' ')} {j['tier_name']}" for j in jobs}))
+    query = f"Which job should the truck take next? {case['setup']} {facts}"
+    found = db.search(query, emb.embed_query([query])[0], group="reference", k=40, exclude_case=None if USE_OWN_EXAMPLE else case_id)
+    # Every policy record, the most relevant first, then the worked examples closest to this case.
+    references = [r for r in found if r["case_id"] is None] + [r for r in found if r["case_id"] is not None][:EXAMPLES]
+    said = case_reports.for_case(case)                         # what customers wrote, linked to each job
+    key = hashlib.sha1(json.dumps([case_id, jobs, sorted(r["digest"] for r in references), [r["text"] for r in said]],
+                                  default=str).encode()).hexdigest()[:16]
+    if case_id in _decisions and _decisions[case_id]["key"] == key and not force:
+        return _decisions[case_id]
+    retrieve_ms = round((time.perf_counter() - started) * 1000)
+
+    started = time.perf_counter()
+    written = None
+    for _attempt in range(2 if generator() == "claude-code" and references else 0):      # an unusable reply is asked for once more
+        reply = _claude(DISPATCH_PROMPT.format(
+            references="\n\n".join(f"[{n}] {r['title']}\n{r['body']}" for n, r in enumerate(references, 1)),
+            setup=case["setup"], jobs="\n".join(_job_line(j) for j in jobs), reports=case_reports.for_prompt(case, said)))
+        start, end = (reply or "").find("{"), (reply or "").rfind("}")
+        try:
+            data = json.loads(reply[start:end + 1]) if reply and 0 <= start < end else None
+        except ValueError:
+            data = None
+        action = str((data or {}).get("action", "")).upper().strip()
+        pole = (data or {}).get("pole_id")
+        pole = str(pole).strip("[] ") if pole not in (None, "", "null") else None
+        if action in ("DISPATCH", "HOLD") and (pole in by_id) == (action == "DISPATCH"):      # a made-up pole is not accepted
+            order, whys = [], {}
+            for item in data.get("order") or []:              # each entry is a pole id, or a pole id with its reason
+                pid = str(item.get("pole_id") if isinstance(item, dict) else item).strip("[] ")
+                if pid in by_id and pid not in order:
+                    order.append(pid)
+                    if isinstance(item, dict) and item.get("why"):
+                        whys[pid] = " ".join(str(item["why"]).split())
+            written = {
+                "action": action, "pole_id": pole, "reason": " ".join(str(data.get("reason") or "").split()),
+                "order": order, "whys": whys, "report_note": " ".join(str(data.get("report_note") or "").split()),
+                "held": [{"pole_id": str(h.get("pole_id")).strip("[] "), "why": " ".join(str(h.get("why") or "").split())}
+                         for h in data.get("held") or [] if isinstance(h, dict) and str(h.get("pole_id")).strip("[] ") in by_id],
+                "refs": [n for n in data.get("refs") or [] if isinstance(n, int) and 1 <= n <= len(references)],
+            }
+        if written:
+            break
+    by = "claude-code" if written else "rule"
+    if not written:                                           # the policy as written in the database's own SQL
+        rule = case["rule"]
+        written = {"action": rule["action"], "pole_id": rule["pole_id"], "order": rule["order"], "whys": {}, "report_note": "", "held": [], "refs": [],
+                   "reason": "This is the database's own rule: only safe, cleared, pending jobs count, then the highest tier, the most customers restored, the most reports and the shortest driving time."}
+    generate_ms = round((time.perf_counter() - started) * 1000)
+
+    expected, rule = case["expected"], case["rule"]
+    result = {
+        "key": key, "case_id": case_id, "generator": by, "model": CLAUDE_MODEL if by == "claude-code" else None, **written,
+        "references": [{"n": n, "title": r["title"], "text": r["body"], "example": r["case_id"] is not None, "used": n in written["refs"]}
+                       for n, r in enumerate(references, 1)],
+        "expected": expected, "correct": written["action"] == expected["action"] and written["pole_id"] == expected["pole_id"],
+        "rule": rule, "agrees_with_rule": written["action"] == rule["action"] and written["pole_id"] == rule["pole_id"],
+        "own_example_hidden": not USE_OWN_EXAMPLE, "reports": case_reports.summary(said),
+        "ms": {"retrieve": retrieve_ms, "generate": generate_ms},
+    }
+    _decisions[case_id] = result
+    db.log_plan(f"case:{case_id}", by, [written["pole_id"] or written["action"]], [r["ref"] for r in references], retrieve_ms, generate_ms)
+    return result
+
+
+def decided() -> dict[str, dict]:
+    """Decisions made so far in this run of the server, by case id."""
+    return dict(_decisions)
+
+
 def status(session) -> dict:
     index(session)
     db = store()
@@ -516,4 +654,8 @@ def status(session) -> dict:
     files = sorted({r["ref"].split("#")[0] for r in db.db.execute("SELECT ref FROM doc WHERE kind = 'reference'")})
     return {"name": "Liwa", "generator": generator(), "model": CLAUDE_MODEL, "embedder": embedder().name,
             "records": counts, "brief": brief["body"] if brief else "", "database": Path(db.path).name,
+            # the hierarchy Liwa works from: the policy records, in the order they are stored
+            "guidance": [{"title": r["title"], "text": r["body"]} for r in db.db.execute(
+                "SELECT title, body FROM doc WHERE kind = 'reference' AND case_id IS NULL ORDER BY id")],
+            "examples": db.db.execute("SELECT count(*) FROM doc WHERE kind = 'reference' AND case_id IS NOT NULL").fetchone()[0],
             "reference": {"folder": "backend/reference", "files": files, "chunks": counts.get("reference", 0)}}

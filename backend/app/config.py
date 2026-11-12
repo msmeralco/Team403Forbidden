@@ -6,11 +6,11 @@ from dataclasses import asdict, dataclass, field
 class Config:
     # Prior chance that an asset of each type failed in the storm.
     prior_failure: dict = field(default_factory=lambda: {
-        "segment": 0.06, "lateral": 0.07, "switch": 0.03, "pole": 0.05, "transformer": 0.04,
+        "segment": 0.06, "lateral": 0.07, "switch": 0.03, "pole": 0.05, "fuse": 0.05, "transformer": 0.04,
     })
     # Minutes on site to inspect an asset of each type.
     inspect_minutes: dict = field(default_factory=lambda: {
-        "segment": 12, "lateral": 10, "switch": 8, "pole": 6, "transformer": 8,
+        "segment": 12, "lateral": 10, "switch": 8, "pole": 6, "fuse": 5, "transformer": 8,
     })
     max_faults: int = 3               # scenarios cover up to this many simultaneous faults
     report_miss_rate: float = 0.15    # P(no outage report | transformer is out)
