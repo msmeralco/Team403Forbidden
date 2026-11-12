@@ -1,5 +1,5 @@
-// The side panel while the typhoon is still to come or is passing. Nothing about outages is
-// shown here: that picture only exists after the storm.
+// The side panel while the typhoon is still to come or is passing. No interruption is shown
+// here: they only exist after the storm.
 import { Play } from '../icons'
 import { when } from './track'
 
@@ -17,7 +17,7 @@ export default function TyphoonPanel({ name, track, running, tick, onStart, onSk
         {!running ? (
           <div className="tab-body">
             <button className="btn primary ty-start" onClick={onStart}><Play size={15} />Start the typhoon</button>
-            <p className="intro">The map shows the forecast track, the points every 12 hours, and the area the center may pass through. Outage reports only start once the storm has passed.</p>
+            <p className="intro">The map shows the forecast track, the points every 12 hours, and the area the center may pass through. Power interruptions only appear once the storm has passed.</p>
             <table className="ty-table">
               <thead><tr><th>When</th><th>Strength</th><th>Winds</th></tr></thead>
               <tbody>
@@ -44,7 +44,7 @@ export default function TyphoonPanel({ name, track, running, tick, onStart, onSk
               </>
             )}
             <div className="ty-bar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((tick?.progress ?? 0) * 100)}><i style={{ width: `${(tick?.progress ?? 0) * 100}%` }} /></div>
-            <p className="muted small">Reports from residents will appear when the storm has passed. <button className="link" onClick={onSkip}>Skip</button></p>
+            <p className="muted small">The power interruptions will appear when the storm has passed. <button className="link" onClick={onSkip}>Skip</button></p>
           </div>
         )}
       </div>

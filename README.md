@@ -1,26 +1,78 @@
 # FirstLook
 
-The people's side of a power outage. *Know where to look next.*
+*Know where to look next.*
 
-After a typhoon, grid equipment can tell a utility which part of the network went down. It cannot see a fallen wire that is still live, a street that is still dark after its area was marked restored, or the hundreds of people posting on Facebook because the hotline is busy. FirstLook reads what those people write and the photos they attach, and turns it into a short list of places worth checking first.
+After a typhoon, a utility has many power interruptions at once and too few crews. FirstLook shows each interruption on a map, draws a zone around it with the infrastructure inside, and has **Liwa**, a retrieval-augmented planner, rank what to check first, with the reason and the crew's ETA.
 
-FirstLook advises. It does not dispatch crews, track them, or decide the order of repairs.
+FirstLook recommends. People decide, and Meralco's crews do the work.
 
-All data is simulated: an invented network of 20 pieces of equipment laid over real places in Greater Manila, 24 barangays, and about 300 invented messages per storm. The photos are stand-ins from Wikimedia Commons (`backend/app/photos/CREDITS.md`).
+All data is simulated: an invented power network laid over real places in Greater Manila, and 13 hand-made interruption cases. Nothing here is Meralco's own data.
 
-## What it does
+## What you see
 
-1. **Hears everyone.** Outage messages from Facebook posts and comments, X, SMS, the hotline and the Meralco App land on one map. Someone who calls, texts and posts counts as one person.
-2. **Reads for meaning.** An AI reader (Claude) reads each message the way a dispatcher would: what is being reported, whether someone is in danger, whether a vulnerable person is mentioned, and where it is. It also looks at attached photos and says what damage is visible.
-3. **Puts safety first.** Live wires, sparks and fallen poles are pinned to the top, whether a keyword rule or the AI reader found them.
-4. **Ranks where to check next**, with a plain reason for each place, and re-ranks when a result is recorded.
-5. **Hands over confirmed damage for repair** with what each repair would bring back and what must be fixed first.
-6. **Notices who is still dark after a repair** and puts the likely second break back on the list.
+1. **The typhoon.** The app opens on a simulated typhoon: its forecast track, a point every 12 hours and the area the center may pass through. Press **Start the typhoon** and it crosses Luzon near Metro Manila in about 17 seconds. No interruption is shown until it has passed. The track is generated in code (`frontend/src/typhoon/track.js`) and is different every time. *Skip* jumps past it; *Replay the typhoon* is in the menu.
+2. **The power interruptions.** Once the storm has passed, every interruption appears as a "!" pin on the map and as a row in the side panel, grouped by the highest customer tier still waiting: Critical customers, Community services, Residential. The number beside a pin is how many **outage reports** are linked to it (reports, not people or households).
+3. **One interruption.** Open a pin or a row. Everything outside its **2 km zone** is blurred and the other pins are hidden. The side panel starts with three numbers: **customers without power**, **reports from customers**, and how many things there are to check. Two pills switch between **What to check, in order** and **Customer reports**. The ranking is shown the same way on the map and in the side panel:
+   - **1, in blue, is what to check first.** It carries the crew's ETA from the nearest Meralco office and Liwa's reason.
+   - **2, 3, ... come next**, in order, under a heading for each customer tier, each with a short reason. The things ranked are equipment: poles, transformers and line sections. On the map each marker carries the equipment's own mark beside its number; the side panel shows the same mark beside the name.
+   - **On hold** carries a pause mark and the reason (not safe for the crew yet, or flooded and waiting for clearance). When everything is on hold, the answer is *Hold the crew*.
+   - **The crew's road route** from the office to number 1 is drawn in blue. Click another number, on the map or in the panel, to see the route to it instead. Only one route is drawn at a time.
+   - **Resolve** on number 1 marks it done: it moves to *Done*, number 2 becomes the new number 1, the route moves with it, and the count of customers without power drops. *Undo* puts it back. This walks down the order Liwa already gave; it does not ask her again.
+   - **Customer reports** (the second pill) lists the reports by channel (Meralco App, SMS, Hotline 16211, Facebook, X), with what Liwa took from them on top. Open a channel to list its reports, hazards and people who depend on power first; open a report to see it the way that channel shows it (a Facebook post or comment, an X post, a text message, a hotline call ticket, a Meralco App report) and how it counts.
+   - *How Liwa decided*, folded at the bottom, has the records she used, the comparison with the test file's expected answer, and *Ask Liwa again*.
+4. **Liwa.** She ranks an interruption live, at the moment it is opened (about 6 to 10 seconds), and keeps the answer until the server restarts or the case changes. Click the character for the hierarchy she ranks by. *Test me on all 13* ranks every interruption afresh and reports how many answers match the test file. There is nothing to type.
 
-### The AI reader's two rules
+### The road route
 
-- **It can raise a flag, never lower one.** Anything the keyword rules flagged stays flagged, whatever the AI thinks.
-- **Without a key or a connection, everything still works** on the keyword rules alone. The screen says which one read each message.
+The route is real roads, not a straight line. `frontend/src/map/route.js` asks, in order:
+
+1. **Google Maps directions**, with the same key as the map. This needs the **Routes API** enabled for that key's Google Cloud project (APIs and Services, Library, "Routes API", Enable; if the key is restricted to certain APIs, add Routes API to the list). The older Directions API also works if it is already enabled.
+2. The public **OpenStreetMap router** (OSRM), when Google refuses or there is no key.
+3. A straight dotted line, when neither answers.
+
+The side panel says which one drew the line. Only the path is used: the ETA shown is always the one in the case.
+
+## The cases and the hierarchy
+
+Three files drive the ranking. Replace them to run other cases or another policy.
+
+- **`backend/cases/meralco_demo.sqlite`**: the test cases. The file is only ever read: it is copied into memory at start-up. `scenarios` holds each case and its expected answer; `pole_jobs` holds the poles: facility, customer tier, safety, flood status, customers restored, report count, driving time, distance, work type. The views `ranked_jobs` and `dispatch_results` are the policy written as plain SQL.
+- **`backend/reference/rag_documents.jsonl`**: the team's reference records for the vector database: 7 policy records and 13 worked examples. `.md` and `.txt` files in that folder are loaded too.
+- **`backend/reference/customer_reports.jsonl`**: two more policy records, a **draft written for this build**, on how customer reports are weighed (see *Customer reports* below). Edit or delete it to change that.
+
+**More to rank.** The supplied cases have one to four poles each. `backend/cases/extra_poles.json` adds six to nine more jobs to each (poles, transformers and line sections serving a public market, schools, a barangay hall, residential areas; some unsafe, flooded or already done), so every interruption has ten or eleven. They are added to the in-memory copy only, must pass the table's own checks, and are chosen so that **no expected answer changes**: a test checks that the database's own rule still gives every expected answer. Delete that file, or set `FIRSTLOOK_EXTRA_POLES=off`, to run the cases exactly as supplied.
+
+The hierarchy, in short: **safety** first, then **flood clearance**, then the **highest customer tier**, the **most customers restored**, the **most reports**, and the **shortest driving ETA**.
+
+Each case's expected answer is shown beside Liwa's and is never sent to her. **A case never sees its own worked example**, since it contains the answer (`FIRSTLOOK_USE_OWN_EXAMPLE=1` allows it). In the last full run, with the extra equipment and the customer reports in front of her, all 13 first choices matched, and her whole order was the same as the database's own rule in all 13.
+
+### Customer reports
+
+The test file gives every job a number of linked outage reports. `backend/app/case_reports.py` writes that many messages for it, so the number has something behind it that a person, and Liwa, can read. They are **invented and repeatable**: the same case always gets the same messages, each from a different invented person, spread over the Meralco App, SMS, the hotline, Facebook and X. What they say follows the job's own facts: a job marked unsafe gets several people describing the same hazard, a flooded one gets flood reports, the rest are ordinary no-power reports, some mentioning someone who depends on power (oxygen, dialysis, a nebulizer). A few posts carry a photo; these are stand-ins from Wikimedia Commons (`backend/app/photos/CREDITS.md`), not pictures of these places.
+
+**Reports are weighed lightly.** Liwa reads every report, under the two draft policy records in `customer_reports.jsonl`:
+
+- Reports are evidence, not orders. They never override safety, flood clearance, the customer tier or the customers restored. Their number counts only where the hierarchy already puts it: as the tie-break after customers restored.
+- **One report does not move a job.** To show this, a few busy residential jobs carry exactly one alarming report that nobody else confirms (someone thinks they saw a spark). Liwa notes it for the crew to confirm on arrival, and the order stays as it was.
+- What reports say is read for the crew: hazards to confirm, and people who depend on power. Three or more separate people describing the same hazard at a job marked safe is a reason to re-check its safety status, not to re-rank it.
+
+These two records are this project's own draft, not Meralco's or the team's supplied policy. They are worth a review by whoever owns the hierarchy.
+
+### What is drawn and what is given
+
+The case file has no coordinates. Each case is drawn in a real barangay, its poles are placed inside the zone, and the crew is drawn coming from the nearest Meralco office on the map. That picture is a drawing aid. The facts, including the **ETA and distance of every pole, are the case file's own** and are not recomputed from the map or from the drawn route.
+
+## How Liwa works
+
+Liwa is retrieval-augmented and local:
+
+1. **Database.** One SQLite file, `backend/.cache/firstlook.db`: the reference records, and records of the simulated service area, in a normal table, with a full-text index (FTS5) and a vector index (the `sqlite-vec` extension) beside it. Only records that changed are rewritten.
+2. **Retrieval.** The case is embedded with a small local model (`BAAI/bge-small-en-v1.5`, 67 MB, downloaded once). Vector search and keyword search each rank the records and the two rankings are fused. Every policy record is passed on, the most relevant first, together with the three worked examples closest to the case.
+3. **Decision.** The retrieved records, the case's jobs and the customer reports linked to each job go to **Claude Opus 5.5 through the Claude Code CLI** (`claude -p`). It returns the action, the order with a short reason for each place, what it took from the reports, and the records it used. The code keeps only equipment that exists in the case. A reply that cannot be read is asked for once more.
+
+This uses the account Claude Code is signed in to on this computer, **not an API key**: every `ANTHROPIC_*` variable is removed before the command runs. It counts against that account's usage, needs internet, and takes about 5 seconds per case.
+
+If Claude Code is missing, signed out or slow, the answer is the one from the case file's SQL views, and the screen says so. `FIRSTLOOK_LIWA=offline` forces that; `FIRSTLOOK_EMBED=hash` skips the embedding model. Every decision is logged in the `plan` table.
 
 ## Run it
 
@@ -41,20 +93,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173.
-
-### Turning on the AI reader
-
-Create `backend/.env` (ignored by git) with an Anthropic API key, then restart the backend:
-
-```
-ANTHROPIC_API_KEY=your-key
-```
-
-- The default model is `claude-opus-5-5`. Set `FIRSTLOOK_AI_MODEL` in the same file to use another.
-- Readings are cached in `backend/.cache/`, so a storm that was read once replays instantly and costs nothing.
-- To check it works: `.venv/Scripts/python -m app.ai_check` (from `backend`). It reads the hand-written demo messages and photos and prints what the AI understood next to what the keyword rules made of them.
-- A real deployment would need a data agreement before sending residents' messages to an AI service. The demo's messages are invented.
+Open http://localhost:5173. For Liwa's written answers, Claude Code must be installed and signed in (`claude auth status`).
 
 ### Google Maps
 
@@ -63,20 +102,6 @@ With a key the app shows Google Maps; without one it falls back to a free OpenSt
 ```
 VITE_GOOGLE_MAPS_API_KEY=your-key
 ```
-
-### The power network on the map
-
-The network is drawn the way it is built: the **substation**, the **lines** and equipment on them, the **distribution transformers**, and the **kWh meters** in the houses of each barangay.
-
-- **Open a barangay pin** and a circle is drawn around the case (2 km by default; 5 km, 10 km or the whole supply path are one tap away). Only the infrastructure inside the circle is shown. Equipment that could be why the houses are dark carries its number on the list, and the side panel lists it in the order to check, with anything further up the line listed separately. *Zoom in to the houses and meters* shows each house, its service drop and its meter: has power, likely no power, or reported no power.
-- **Open a place** (a line, switch or transformer) and everything it feeds is picked out.
-- **The Meralco grid chip** draws the whole network at once.
-
-This is the exercise's own network: one substation, 20 pieces of equipment, and 24 meters drawn per barangay as a sample of its accounts. Lines follow real roads: `scripts/fetch_network_routes.py` asks a public road router (OSRM, on OpenStreetMap data) for the path of each connection once and saves it in `frontend/public/grid/network-routes.json`, so it works offline. Connections it could not path are drawn straight.
-
-The **Meralco offices** chip is separate: offices as mapped by OpenStreetMap volunteers (`scripts/fetch_meralco_grid.py`), not Meralco's own list. The earlier overlay of OpenStreetMap power lines is no longer drawn.
-
-Data (c) OpenStreetMap contributors, Open Database License. The credit appears on the map while these are shown; keep it there.
 
 ### Tests
 
@@ -87,93 +112,45 @@ cd backend
 
 The tests never call an AI service, Claude Code or the embedding model.
 
-### Liwa, the inspection planner
+## The map layers
 
-One character stands over the map. Click her for the **inspection plan**: which places to check, in what order, and why. There is nothing to type. The plan is rewritten whenever the picture changes (a new stage, a field result, a repair, a hazard made safe), and each step opens its place on the map.
+- **Interruptions.** The pins. On by default.
+- **Landmarks.** Place labels on the basemap.
+- **Meralco grid.** The whole simulated network at once: one substation and 44 pieces of equipment (lines, switches, poles, fuse cutouts, distribution transformers). Lines follow real roads: `scripts/fetch_network_routes.py` asked a public road router (OSRM, on OpenStreetMap data) for each path once and saved it in `frontend/public/grid/network-routes.json`, so it works offline. Zoomed in, sample houses and kWh meters are drawn per barangay. While an interruption is open the network is drawn inside its zone only when this chip is on, so that by default nothing but the ranked equipment and the crew's route is in the circle.
+- **Meralco offices.** Offices as mapped by OpenStreetMap volunteers (`scripts/fetch_meralco_grid.py`), not Meralco's own list. The crew in each case is drawn from the nearest of these.
 
-Liwa is retrieval-augmented and local:
-
-1. **Reference documents.** Put the guidance that should decide the ranking in `backend/reference/` as `.md` or `.txt` files (see the README there). They are split into records of about 900 characters and stored in the vector database. Until there is one, the only reference is FirstLook's built-in rule.
-2. **Database.** One SQLite file, `backend/.cache/firstlook.db`: the reference records and the event's own records (every barangay, place and message) in a normal table, with a full-text index (FTS5) and a vector index (the `sqlite-vec` extension) beside it. Only records that changed are rewritten.
-3. **Retrieval.** The situation is embedded with a small local model (`BAAI/bge-small-en-v1.5`, 67 MB, downloaded once). Vector search and keyword search each rank the reference records and the two rankings are fused.
-4. **Plan.** The retrieved guidance, the situation and the candidate places go to **Claude Opus 5.5 through the Claude Code CLI** (`claude -p`). It returns the order and one reason per place, citing the reference it followed. The code keeps only real places, and anything Claude leaves out keeps the engine's position. This uses the account Claude Code is signed in to on this computer, not an API key: every `ANTHROPIC_*` variable is removed before the command runs. It counts against that account's usage and needs internet.
-
-If Claude Code is missing, signed out or slow, the plan is the engine's own order with the engine's reasons, and says so. `FIRSTLOOK_LIWA=offline` forces that; `FIRSTLOOK_EMBED=hash` skips the embedding model. Every plan is logged in the `plan` table.
-
-**She only advises.** She cannot dispatch a crew, repair anything, give a restoration time or send a message.
-
-Note: the *Check next* list in the side panel is still the engine's order. With no reference documents the plan and the list agree; once documents change the order, the plan shows it and says "the references changed the order".
-
-### Test cases: a typhoon, then interruptions
-
-A test case is a JSON file in `backend/cases/` with stages in the order they happen: the typhoon first, then each interruption. A stage gives what is really damaged (kept hidden in the app) and, optionally, who reports and which hazards; anything left out is simulated. The format is described at the top of `backend/app/cases.py`, and `example-typhoon-then-interruptions.json` is a worked example.
-
-Open the menu (☰) and pick a case to load its first stage; the side panel then shows the stage and a **Next** link. Each stage starts fresh, and Liwa writes a new plan for it. A file with a mistake is listed in the menu with what is wrong.
-
-## Using it
-
-- **Opening: the typhoon.** The app opens on a simulated typhoon: its forecast track, a point every 12 hours and the area the center may pass through, drawn on the map. Press **Start the typhoon** and it crosses Luzon near Metro Manila in about 17 seconds. Nothing about outages is shown until it has passed. The track is generated in code (`frontend/src/typhoon/track.js`) and is different every time; *Replay the typhoon* in the menu shows it again, and *Skip* jumps past it.
-- **After the storm.** One sentence on the situation, then three tabs.
-- **Check next.** The ranked list. Open a place for one short page: the reasons it ranks where it does, what to look for, how to get there, and three buttons for what was found.
-- **Damage found.** Confirmed damage and what each repair would bring back, then what has been repaired or checked clear. Meralco decides the repair order.
-- **Messages.** Every message. Filter by safety hazards, vulnerable people or photos. Open one to see it as it was sent and what FirstLook understood.
-- **Liwa.** Click her for the inspection plan. Drag her out of the way, or minimise her to the orange bolt button.
-- **Menu (☰).** Test cases, and the demo controls: play the demo, replay the typhoon, restart the storm, load a random storm.
-
-## How the ranking works
-
-Places are ranked in strict order:
-
-1. **Safety.** A place with an open hazard (live wire, sparks, fallen pole) goes to the top.
-2. **Essential facilities.** Places that feed a hospital, health center, evacuation center or water pumping station that is likely without power. Hospitals count 3, the others 2.
-3. **Position in the network.** A main line comes before a switch or pole on it, then a branch line, then a distribution transformer: more depends on what is closer to the substation.
-4. **Customers and load.** How many customer accounts the engine predicts are without power behind the place, and the load that implies (a rough 0.5 kW per account).
-5. **Reports.** How many people reported from the barangays behind it.
-6. **Access.** The shorter drive first.
-
-The order applies only to places where damage is plausible. A place the evidence points away from (under a 5% chance that the damage is there, for example a main line that is clearly live because a barangay behind it has power) or where a visit would tell us almost nothing waits at the bottom.
-
-**Where the order comes from.** Meralco does not publish a formal ranking. Its statements during Ulysses, Carina, Kristine and other storms consistently describe safety first, then hospitals and other vital installations, then main lines and lateral lines, working from the largest outages down. Other utilities publish the same sequence step by step: hazards, critical facilities, the bulk system, main feeders, branch lines, then individual services. The six levels above follow that; the weights and the 5% line are this project's own choices.
-
-The predictions come from the engine: it keeps every combination of up to three simultaneous breaks (1,350 of them) and weighs each against the evidence, meaning how many people reported from each area, what was found on site, and whether power came back after each repair. That is plain probability math, not machine learning. Every assumption is in `backend/app/config.py`.
-
-The Insights page has been taken out of the app. Its comparison (`POST /api/evaluate`) measured the engine's older information-based search, not this rule.
+Data (c) OpenStreetMap contributors, Open Database License. The credit appears on the map while these are shown; keep it there.
 
 ## Layout
 
 | Path | Contents |
 | --- | --- |
-| `backend/app/config.py` | Every tunable assumption |
-| `backend/app/network.py` | Invented equipment, barangays and road graph |
-| `backend/app/reports.py` | Invented messages per channel, hand-written demo messages, keyword rules |
-| `backend/app/ai.py` | The AI reader: prompts, requests, cache |
-| `backend/app/ai_check.py` | One-command check of the AI reader |
-| `backend/app/knowledge.py` | Turns the event and the reference documents into records for the database |
-| `backend/app/liwa.py` | Liwa: the SQLite database, vector and keyword search, the plan through Claude Code, the offline fallback |
-| `backend/app/cases.py` | Reads and checks test cases |
-| `backend/cases/` | Test cases: one JSON file each, a typhoon then the interruptions that follow |
-| `backend/reference/` | Reference documents that decide how inspections are ranked |
-| `backend/app/photos/` | Stand-in photos and their credits |
-| `backend/app/engine.py` | Damage scenarios, evidence weighing, information value |
-| `backend/app/state.py` | One storm: ranking, results, repair handoff, AI readings |
-| `backend/app/simulation.py` | Comparison with other ways of choosing where to look |
+| `backend/cases/meralco_demo.sqlite` | The 13 test cases, expected answers, and the policy as SQL views |
+| `backend/cases/extra_poles.json` | Extra equipment added to each case in memory, so there is more to rank |
+| `backend/reference/rag_documents.jsonl` | The team's reference records for the vector database: 7 policies, 13 worked examples |
+| `backend/reference/customer_reports.jsonl` | Draft policy records on how customer reports are weighed |
+| `backend/app/cases.py` | Reads the test cases |
+| `backend/app/case_reports.py` | Invented customer reports for each job, and the barangay each case is drawn in |
+| `backend/app/knowledge.py` | Turns the reference documents into records for the database |
+| `backend/app/liwa.py` | Liwa: the SQLite database, vector and keyword search, the decision through Claude Code, the fallback |
 | `backend/app/main.py` | FastAPI endpoints under `/api` |
-| `frontend/src/panel` | Left panel: first screen, priorities, reports, roads |
+| `backend/app/network.py`, `state.py`, `engine.py`, `reports.py`, `ai.py` | The simulated service area. The app now uses it for the barangays and the network on the map; its earlier screens (message reading, the engine's own ranking) are no longer shown |
+| `frontend/src/App.jsx` | The app: typhoon, then the interruptions |
+| `frontend/src/panel` | Side panel: the list of interruptions and the page for one |
+| `frontend/src/map` | Map, interruption pins and ranked poles (`CaseLayer.jsx`, `cases.js`), the crew's road route (`RouteLayer.jsx`, `route.js`), the blur outside the zone (`ZoneFocus.jsx`), the network layer (`GridLayer.jsx`, `network.js`) |
 | `frontend/src/typhoon` | The opening typhoon: generated track, map drawing, its panel |
-| `frontend/src/assistant` | Liwa: 3D character and the inspection plan panel |
-| `frontend/src/map` | Map, pins, basemap, and the power network layer (`GridLayer.jsx`, `network.js`) |
-| `frontend/public/grid/network-routes.json` | Road paths for the network's lines |
-| `frontend/public/grid/meralco-osm.json` | Meralco offices (and the unused line overlay) as mapped on OpenStreetMap |
-| `scripts/fetch_network_routes.py`, `scripts/fetch_meralco_grid.py` | Rebuild those two files |
+| `frontend/src/assistant` | Liwa: the 3D character and her panel |
+| `frontend/public/grid` | Road paths for the network's lines; Meralco offices from OpenStreetMap |
+| `scripts/` | Rebuild those two files |
 
 ## Limits
 
-- Everything is simulated. Results on the Insights page show relative behaviour, not field performance.
-- Liwa's plan is written by Claude from the retrieved guidance and can still misapply it. The guidance and the reason for each step are shown so a person can check.
-- A written plan needs internet and a signed-in Claude Code and takes roughly 5 to 15 seconds; without them the engine's own order is shown. It counts against that account's usage limits.
-- The AI reader can misread a message or a photo. Its reading is always shown next to the original, and a person decides what to do.
-- FirstLook can only see areas where someone has reported. An outage nobody reports stays invisible to it.
-- The network on the map is invented for the exercise. Its lines follow real roads, but they are not Meralco's lines, and the houses and meters are a drawing aid placed around each barangay's pin, not surveyed buildings.
-- The model covers up to three simultaneous breaks on a 20-item network. A real feeder map is far larger.
-- Routes follow a simplified road graph, not turn-by-turn streets.
-- One storm is held in memory; restarting the backend resets it.
+- Everything is simulated. The 13 cases are test scenarios, not field records.
+- Liwa's answer is written by Claude from the retrieved records and can still misapply them. The records and her reason are shown so a person can check, and the case file's own answer is shown beside hers.
+- The 13 of 13 result is on these 13 cases, with each case's own example held out. It says nothing yet about cases the policy records do not cover.
+- ETAs are given in the case file. FirstLook does not compute travel time: the road route is drawn for orientation, between an office on a volunteer-made map and a pole position that is itself a drawing aid.
+- Resolve is kept on screen only. It is not saved, and it does not make Liwa rank again.
+- The customer reports are invented to fit each job's facts, so they agree with the case by construction. Real reports would be messier: wrong places, duplicates, rumours. How Liwa copes with those has not been tested.
+- "Customers without power" is the sum of the customers each unfinished job would restore, as given in the cases. It is a count of customer accounts, not of people.
+- The network on the map is invented. Its lines follow real roads, but they are not Meralco's lines.
+- A written answer needs internet and a signed-in Claude Code, and counts against that account's usage limits.

@@ -54,7 +54,7 @@ def test_every_part_of_the_storm_becomes_a_record(s):
 def test_the_database_matches_the_storm_and_only_changes_what_changed(s):
     liwa.index(s)
     counts = liwa.store().counts()
-    assert counts["barangay"] == 24 and counts["place"] == 20 and counts["message"] > 200
+    assert counts["barangay"] == 24 and counts["place"] == 44 and counts["message"] > 200
     db = liwa.store().db
     total = db.execute("SELECT count(*) FROM doc").fetchone()[0]
     assert db.execute("SELECT count(*) FROM doc_vec").fetchone()[0] == total

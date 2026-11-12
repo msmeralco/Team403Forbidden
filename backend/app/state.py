@@ -22,6 +22,7 @@ RESOURCES = {
     "lateral": "Line crew + conductor span",
     "switch": "Switch replacement crew",
     "pole": "Pole replacement + bucket truck",
+    "fuse": "Line crew + fuse links",
     "transformer": "Transformer + lift crew",
 }
 OBJECTIVES = {
@@ -29,10 +30,11 @@ OBJECTIVES = {
     "lateral": "Drive along the line and look for fallen wires, broken poles or trees on the line.",
     "switch": "Check whether the switch is open, burnt or damaged.",
     "pole": "Check for a broken or leaning pole, or a broken crossarm.",
+    "fuse": "Check whether the fuse has blown: a cutout hanging open means it has.",
     "transformer": "Check for a blown fuse, oil leak, burn marks or a fallen transformer.",
 }
 PLAIN_TYPE = {"segment": "power line", "lateral": "power line", "switch": "switch",
-              "pole": "pole", "transformer": "transformer"}
+              "pole": "pole", "fuse": "fuse cutout", "transformer": "transformer"}
 CAVEAT = ("Recommendation depends on scenario coverage (up to two simultaneous faults) "
           "and on the quality of the outage reports.")
 
@@ -73,9 +75,10 @@ def essential_weight(name: str) -> int:
     return max((w for key, w in ESSENTIAL if key in name.lower()), default=1)
 
 
-# Where a piece of equipment sits in the network. The closer to the substation, the more depends on it.
-NETWORK_LEVEL = {"segment": (1, "Main line"), "switch": (2, "Switch on the main line"), "pole": (2, "Pole on the main line"),
-                 "lateral": (3, "Branch line"), "transformer": (4, "Distribution transformer")}
+# What each kind of equipment is called when the ranking explains itself. Where it sits in the network is
+# counted in steps from the substation: the fewer steps, the more depends on it.
+NETWORK_LABEL = {"segment": "Main line", "switch": "Switch", "pole": "Pole", "lateral": "Branch line",
+                 "fuse": "Fuse cutout", "transformer": "Distribution transformer"}
 KW_PER_ACCOUNT = 0.5      # rough demand per customer account, used only to give a sense of load
 PLAUSIBLE = 0.05          # below this chance of damage, the evidence points elsewhere and the place waits at the bottom
 
@@ -476,7 +479,7 @@ class Session:
         total_reported = max(sum(st["people"] for st in self.area_stats.values()), 1)
         total_accounts = max(float(self.model.households.sum()), 1.0)
         homes = 0.5 * reported / total_reported + 0.5 * p_damaged * predicted / total_accounts
-        level, level_label = NETWORK_LEVEL[self.model.assets[i].type]
+        level, level_label = len(self.ancestors[i]) + 1, NETWORK_LABEL[self.model.assets[i].type]
         return {
             "safety": [f"{h['label']} in {h['area']}" for h in hazard],
             "essential": essential, "essential_score": sum(e["weight"] for e in essential),
@@ -683,6 +686,15 @@ class Session:
                 "items": sorted(({"resource": k, "expected": round(v, 2)} for k, v in expected.items()),
                                 key=lambda x: -x["expected"])}
 
+    def _resources(self, post: np.ndarray, recs: list[dict]) -> dict:
+        """As resources(), and the damage also counts as pinned down once something has been found
+        and no place is left where further damage is plausible. On a large network one exact
+        scenario rarely reaches the confidence threshold by itself."""
+        res = self.resources(post)
+        found = any(o["result"] == "damaged" for o in self.observations)
+        res["identified"] = res["identified"] or (found and not any(r["tier"] != "low" for r in recs))
+        return res
+
     def handoff(self, post: np.ndarray) -> list[dict]:
         """Confirmed damage waiting for repair, with the facts a repair decision needs.
         FirstLook does not rank repairs; this is sorted so what can be fixed now comes first."""
@@ -706,7 +718,8 @@ class Session:
             for row in np.flatnonzero(m.upstream[:, i]):
                 path = m.upstream[row] & ~fixed
                 path[i] = False
-                p_other = float(post @ m.F[:, path].any(axis=1))
+                confirmed = any(self.status(m.ids[j]) == "damaged" for j in np.flatnonzero(path))
+                p_other = 1.0 if confirmed else float(post @ m.F[:, path].any(axis=1))
                 for ar in AREAS:
                     if ar.transformer != m.ids[m.transformers[row]]:
                         continue
@@ -848,7 +861,7 @@ class Session:
                             "history": self.history},
             "elapsed_min": round(self.elapsed),
             "recommendations": recs, "excluded": excluded,
-            "log": list(reversed(self.observations)), "resources": self.resources(post),
+            "log": list(reversed(self.observations)), "resources": self._resources(post, recs),
             "handoff": self.handoff(post), "repaired": self.repaired_view(post),
             "ai": self.ai_view(),
         }
