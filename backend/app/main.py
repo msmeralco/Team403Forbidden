@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai, case_reports, cases, liwa
+from . import ai, case_reports, cases, history, liwa, report_pdf
 from .config import CONFIG
 from .reports import SOURCES
 from .state import Conflict, NeedsPlace, Session
@@ -90,12 +90,75 @@ def liwa_plan(force: bool = False):
     return liwa.plan(s(), force)
 
 
+def _shown(case: dict, index: int, made: dict) -> dict:
+    """A case as the screen needs it: where it is drawn, and Liwa's latest decision if she has made one."""
+    return {**case, "place": case_reports.place_of(index), "decision": made.get(case["id"])}
+
+
+class Condition(BaseModel):
+    pole_id: str
+    change: Literal["safe", "unsafe", "flood_cleared"]
+    done: list[str] = []                                         # equipment marked resolved on screen, recorded at the same time
+
+
+@app.post("/api/cases/{case_id}/conditions")
+def case_conditions(case_id: str, body: Condition):
+    """Something changed at one job. Record it; the next decision ranks the case as it now stands."""
+    if cases.find(case_id) is None:
+        raise KeyError(f"No test case {case_id}")
+    for pole in body.done:
+        cases.change(case_id, pole, "done")
+    case = cases.change(case_id, body.pole_id, body.change)
+    return _shown(case, case_reports.index_of(case_id), {})
+
+
+@app.post("/api/cases/{case_id}/restart")
+def case_restart(case_id: str):
+    """Put one case back as it was supplied."""
+    return _shown(cases.restart(case_id), case_reports.index_of(case_id), {})
+
+
 @app.get("/api/cases")
 def list_cases():
     """The test cases (backend/cases/meralco_demo.sqlite) with their jobs, expected answers and any decision made so far."""
     made = liwa.decided()
-    return {"cases": [{**c, "place": case_reports.place_of(i), "decision": made.get(c["id"])} for i, c in enumerate(cases.all_cases())],
+    return {"cases": [_shown(c, i, made) for i, c in enumerate(cases.all_cases())],
             "tiers": cases.tiers() if cases.available() else {}, "generator": liwa.generator(), "model": liwa.CLAUDE_MODEL}
+
+
+def _now() -> dict:
+    event = s().state()["event"]
+    return history.current(event["name"], event["all_clear"])
+
+
+@app.get("/api/history")
+def past_typhoons():
+    """Past typhoons (invented) with their summaries, newest first, and the one in progress."""
+    now = _now()
+    return {"events": history.all_events(), "current": {k: v for k, v in now.items() if k != "interruptions"} | {"count": len(now["interruptions"])}}
+
+
+@app.get("/api/history/{event_id}")
+def past_typhoon(event_id: str):
+    """One past typhoon with its full interruption log."""
+    event = history.find(event_id)
+    if event is None:
+        raise KeyError(f"No typhoon {event_id}")
+    return event
+
+
+@app.get("/api/history/{event_id}/report.pdf")
+def typhoon_report(event_id: str):
+    """The PDF: a restoration report for a past typhoon, or the situation report for the one in progress ("current")."""
+    if event_id == "current":
+        now = _now()
+        data, name = report_pdf.situation(now), now["document"]
+    else:
+        event = history.find(event_id)
+        if event is None:
+            raise KeyError(f"No typhoon {event_id}")
+        data, name = report_pdf.restoration(event), event["document"]
+    return Response(content=data, media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{name}.pdf"'})
 
 
 @app.get("/api/cases/{case_id}/reports")

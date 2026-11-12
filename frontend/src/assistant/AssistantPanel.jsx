@@ -16,7 +16,8 @@ export default function AssistantPanel({ status, cases, busy, running, style, on
   useEffect(() => { closeBtn.current?.focus({ preventScroll: true }) }, [])
   const online = status?.generator === 'claude-code'
   const done = cases.filter((c) => c.decision)
-  const right = done.filter((c) => c.decision.correct).length
+  const judged = done.filter((c) => c.decision.correct != null)      // once conditions have changed, the expected answer no longer applies
+  const right = judged.filter((c) => c.decision.correct).length
 
   return (
     <section className="lp" style={style} role="dialog" aria-label="Liwa, the planner">
@@ -33,7 +34,7 @@ export default function AssistantPanel({ status, cases, busy, running, style, on
       <div className="lp-feed">
         <div className="lp-brief">
           <h3>So far</h3>
-          <p>{done.length === 0 ? `None of the ${cases.length} interruptions is ranked yet.` : `${done.length} of ${cases.length} interruptions ranked. ${right} of ${done.length} match the expected answer in the test file.`}</p>
+          <p>{done.length === 0 ? `None of the ${cases.length} interruptions is ranked yet.` : `${done.length} of ${cases.length} interruptions ranked. ${right} of ${judged.length} match the expected answer in the test file.`}</p>
         </div>
         <h3 className="lp-sub">The hierarchy I rank by</h3>
         {!status && <p className="lp-line">Reading the reference database…</p>}

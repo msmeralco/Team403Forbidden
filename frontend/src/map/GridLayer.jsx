@@ -65,13 +65,13 @@ function equipmentIcon(asset, rec, status, picked, selected) {
 }
 
 // zoneKm: when a barangay is open, only what lies within this many km of it is drawn (null = its whole supply path).
-export default function GridLayer({ state, sel, show, offices, zoneKm, plain, onSelectAsset, onSelectArea, onError }) {
+export default function GridLayer({ state, sel, show, offices, zoneKm, zoneAt, plain, onSelectAsset, onSelectArea, onError }) {
   const map = useMap()
   const [routes, setRoutes] = useState(null)        // road paths for the lines; null until loaded, {} if there are none
   const [places, setPlaces] = useState(null)        // office locations
   const [near, setNear] = useState(() => map.getZoom() >= METER_ZOOM)
   const picked = useMemo(() => traceOf(state, sel), [state, sel?.kind, sel?.id]) // eslint-disable-line react-hooks/exhaustive-deps
-  const drawing = show || Boolean(picked)
+  const drawing = show || Boolean(picked) || Boolean(zoneAt)      // zoneAt: the middle of an open interruption that is not in one of the sector's barangays
 
   useEffect(() => {
     const update = () => setNear(map.getZoom() >= METER_ZOOM)
@@ -94,7 +94,7 @@ export default function GridLayer({ state, sel, show, offices, zoneKm, plain, on
 
   // Redraw only when something that shows has changed.
   const version = JSON.stringify([
-    state.event.id, show, near, sel?.kind, sel?.id, zoneKm, Boolean(plain), Boolean(routes),
+    state.event.id, show, near, sel?.kind, sel?.id, zoneKm, zoneAt, Boolean(plain), Boolean(routes),
     state.assets.map((a) => a.status), state.repaired.map((x) => x.asset_id),
     state.recommendations.map((r) => [r.asset_id, r.rank, r.tier]),
     state.areas.map((a) => [a.people, a.p_out >= 0.5, a.restored]),
@@ -119,7 +119,7 @@ export default function GridLayer({ state, sel, show, offices, zoneKm, plain, on
     // The zone around an opened case: a circle. Inside it everything is drawn; outside, nothing
     // (or, with the whole network switched on, a faded backdrop).
     const zoneArea = sel?.kind === 'area' && zoneKm ? state.areas.find((a) => a.id === sel.id) : null
-    const zone = zoneArea ? { center: zoneArea.pos, km: zoneKm } : null
+    const zone = zoneArea ? { center: zoneArea.pos, km: zoneKm } : zoneAt && zoneKm ? { center: zoneAt, km: zoneKm } : null
     const inside = (p) => km(p, zone.center) <= zone.km
     const DIM = 0.2
     const stroke = (points, width, on, title, click, dim) => {

@@ -9,7 +9,7 @@
 // How Liwa got there is folded away at the bottom of the first view.
 import { Fragment, useState } from 'react'
 import { Alert, AppMark, Back, Check, FacebookMark, Pause, PhoneMark, Pin, SmsMark, XMark } from '../icons'
-import { EQUIPMENT_ICON, TIER_CLASS, customersOf, minutes, plain, poleName, reportsOf, reportsText, said, tierOf } from '../map/cases'
+import { EQUIPMENT_ICON, TIER_CLASS, customersOf, minutes, plain, poleName, reportsOf, reportsText, said, standing, tierOf } from '../map/cases'
 import { ReportFull, SourceBadge, clock, sender } from './ReportCard'
 
 const TIER_NAME = { 1: 'Critical customers', 2: 'Community services', 3: 'Residential' }
@@ -142,8 +142,34 @@ function Reports({ c, told, note, place }) {
   )
 }
 
+const CHANGE_SAID = { safe: 'is now safe for the crew', unsafe: 'is not safe for the crew after all', flood_cleared: 'is clear of flood' }
+const stood = (at) => (at === 'hold' ? 'on hold' : at === 'done' ? 'done' : at == null ? 'not ranked' : `number ${at}`)
+
+// After conditions change: what changed, and what moved because of it.
+function Moved({ c, rank, shift, onRestart, busy }) {
+  const now = standing(rank)
+  const name = Object.fromEntries(c.jobs.map((j) => [j.pole_id, poleName(j)]))
+  const moves = c.jobs.map((j) => j.pole_id).filter((id) => shift.before[id] !== undefined && shift.before[id] !== now[id])
+    .sort((a, b) => (a === shift.pole ? -1 : b === shift.pole ? 1 : (Number(now[a]) || 99) - (Number(now[b]) || 99)))
+  const shown = moves.slice(0, 4)
+  return (
+    <div className="moved" role="status">
+      <strong>Liwa ranked this again</strong>
+      <p>{name[shift.pole]} {CHANGE_SAID[shift.change]}.</p>
+      {shown.length > 0 ? (
+        <ul>
+          {shown.map((id) => <li key={id}><b>{name[id]}</b><span>{stood(shift.before[id])}</span><i aria-hidden="true">to</i><span className="to">{stood(now[id])}</span></li>)}
+          {moves.length > shown.length && <li className="rest">and {moves.length - shown.length} more moved</li>}
+        </ul>
+      ) : <p className="muted">Nothing changed place.</p>}
+      <button className="link" disabled={busy} onClick={onRestart}>Put this interruption back as it was</button>
+    </div>
+  )
+}
+
 // rank: the ranking with resolved equipment taken out (see ranking() in map/cases.js). active: the one whose route is on the map.
-export function CaseDetail({ c, plan, rank, active, route, told, busy, error, onDecide, onPick, onResolve, onUndo }) {
+// shift: the last change of conditions and where everything stood before it. onChange(pole, what) records a new one.
+export function CaseDetail({ c, plan, rank, active, route, told, shift, busy, error, onDecide, onPick, onResolve, onUndo, onChange, onRestart }) {
   const [view, setView] = useState('order')            // order | reports
   const d = c.decision
   const tier = TIER_CLASS[tierOf(c)]
@@ -178,7 +204,8 @@ export function CaseDetail({ c, plan, rank, active, route, told, busy, error, on
 
       {view === 'order' && (
         <section className="case-view">
-          {!d && busy && <p className="case-wait"><i className="lp-spin" />Liwa is reading the reports and ranking the equipment now</p>}
+          {!d && busy && <p className="case-wait"><i className="lp-spin" />{c.changes?.length ? 'Conditions changed. Liwa is ranking the equipment again' : 'Liwa is reading the reports and ranking the equipment now'}</p>}
+          {rank && shift && <Moved c={c} rank={rank} shift={shift} onRestart={onRestart} busy={busy} />}
           {!d && error && <p className="warn-text" role="alert">Liwa could not rank this: {error} <button className="link" onClick={() => onDecide(true)}>Try again</button></p>}
           {!d && (
             <ul className="order">
@@ -212,7 +239,8 @@ export function CaseDetail({ c, plan, rank, active, route, told, busy, error, on
                         <div className="more">
                           {why(j, i) && <p className="reason"><b>Why first:</b> {why(j, i)}</p>}
                           <button className="btn primary sm" onClick={() => onResolve(j.pole_id)}><Check size={15} />Resolve</button>
-                          {rank.go.length > 1 && <span className="muted small">Marks it done and moves to number 2.</span>}
+                          <button className="btn sm" disabled={busy} onClick={() => onChange(j.pole_id, 'unsafe')}>Not safe after all</button>
+                          {rank.go.length > 1 && <span className="muted small">Resolve marks it done and moves to number 2. Not safe after all puts it on hold and asks Liwa to rank again.</span>}
                         </div>
                       )}
                     </li>
@@ -228,6 +256,13 @@ export function CaseDetail({ c, plan, rank, active, route, told, busy, error, on
                 {rank.held.map(({ job, why: reason }) => (
                   <li key={job.pole_id} className="held">
                     <div className="pick"><span className="num"><Pause size={14} /></span><span className="body"><Name job={job} /><span className="eta">{reason}</span><span className="facts">{job.tier_name}. {facts(job)}</span></span></div>
+                    {(job.safety === 'unsafe' || (job.flood_status === 'flooded_hold' && job.work_type !== 'inspect')) && (
+                      <div className="more hold-more">
+                        {job.safety === 'unsafe'
+                          ? <button className="btn sm" disabled={busy} onClick={() => onChange(job.pole_id, 'safe')}>Now safe for the crew</button>
+                          : <button className="btn sm" disabled={busy} onClick={() => onChange(job.pole_id, 'flood_cleared')}>Flood cleared</button>}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>
@@ -252,10 +287,18 @@ export function CaseDetail({ c, plan, rank, active, route, told, busy, error, on
       {view === 'order' && d && (
         <details className="how">
           <summary>How Liwa decided</summary>
-          <p className={`case-check${d.correct ? ' ok' : ' off'}`}>
-            {d.correct ? <Check size={15} /> : <Alert size={15} />}
-            {d.correct ? 'Same first choice as the expected answer in the test file.' : `The test file expects: ${said(c.expected, c.jobs)}. ${c.expected.reason}`}
-          </p>
+          <p className="muted small">Test scenario: {c.scenario}{c.added ? ' (one of the seven added for this build)' : ' (supplied in the test file)'}.</p>
+          {d.changed ? (
+            <p className={`case-check${d.agrees_with_rule ? ' ok' : ' off'}`}>
+              {d.agrees_with_rule ? <Check size={15} /> : <Alert size={15} />}
+              Conditions have changed, so the scenario's expected answer no longer applies. {d.agrees_with_rule ? 'Same first choice as the written rule gives for the situation now.' : 'The written rule gives a different first choice for the situation now.'}
+            </p>
+          ) : (
+            <p className={`case-check${d.correct ? ' ok' : ' off'}`}>
+              {d.correct ? <Check size={15} /> : <Alert size={15} />}
+              {d.correct ? 'Same first choice as the expected answer for this scenario.' : `The scenario expects: ${said(c.expected, c.jobs)}. ${c.expected.reason}`}
+            </p>
+          )}
           <p className="muted small">
             {d.generator === 'claude-code'
               ? `Ranked by ${modelName(d.model)} in ${(d.ms.generate / 1000).toFixed(1)} seconds. She read the ${reportsText(d.reports?.total ?? 0)} from customers and the ${d.references.length} records below from the reference database.`

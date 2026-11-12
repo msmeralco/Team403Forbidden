@@ -56,14 +56,15 @@ function spread(areas) {
 
 export function layout(c, index, areas, offices) {
   const order = spread(areas)
-  const area = areas.find((a) => a.id === c.place?.area_id) ?? order[index % order.length]      // the server says where; the spread is the fallback
-  const center = area.pos
+  // The server says where: one of the sector's barangays, or a place of its own (Manila and other cities).
+  const area = areas.find((a) => a.id === c.place?.area_id) ?? (c.place?.pos ? null : order[index % order.length])
+  const center = c.place?.pos ?? area.pos
   const nearest = offices.reduce((best, o) => (!best || km([o.lat, o.lon], center) < km([best.lat, best.lon], center) ? o : best), null)
   const n = c.jobs.length
   const poles = c.jobs.map((job, k) => ({ job, pos: offset(center, 30 + index * 37 + (k * 360) / n, RINGS[k % 3]) }))      // spread round the zone, on three rings in turn
   return {
     area, center, poles, radius: ZONE_KM * 1000,
-    place: `Brgy. ${area.barangay}, ${area.city.split(',')[0]}`,
+    place: c.place?.label ?? `Brgy. ${area.barangay}, ${area.city.split(',')[0]}`,
     office: nearest && { name: officeName(nearest), pos: [nearest.lat, nearest.lon], km: km([nearest.lat, nearest.lon], center) },
   }
 }
@@ -100,6 +101,15 @@ export function plain(text, jobs) {
   if (!text) return text
   return [...jobs].sort((a, b) => b.pole_id.length - a.pole_id.length)
     .reduce((out, j) => out.split(j.pole_id).join(`the ${poleName(j).charAt(0).toLowerCase()}${poleName(j).slice(1)}`), text)
+}
+
+// Where every piece of equipment stands in a ranking: its number, 'hold' or 'done'. Used to say what moved.
+export function standing(rank) {
+  const at = {}
+  rank.go.forEach((j, i) => { at[j.pole_id] = i + 1 })
+  rank.held.forEach(({ job }) => { at[job.pole_id] = 'hold' })
+  rank.done.forEach(({ job }) => { at[job.pole_id] = 'done' })
+  return at
 }
 
 // What Liwa recommends, in a few words.

@@ -534,7 +534,7 @@ REFERENCE (retrieved from the reference database for this case)
 {references}
 
 CASE
-{setup}
+{setup}{since}
 
 JOBS
 {jobs}
@@ -549,7 +549,8 @@ Reply with only a JSON object, no markdown fences and no other text, in exactly 
 "report_note": "at most two short plain sentences, 45 words in all: the one or two things in the customer reports that matter most for the crew (a hazard to confirm on arrival, someone who depends on power), then whether the reports changed the order", "refs": [1]}}
 "order" lists every job the truck could do now, best first. "refs" holds the numbers of the reference records you applied."""
 EXAMPLES = 3                                   # worked examples given beside the policy records
-_decisions: dict[str, dict] = {}
+_decisions: dict[str, dict] = {}                # the latest decision for each case
+_memo: dict[str, dict] = {}                     # every decision made in this run, by the situation it answered
 USE_OWN_EXAMPLE = os.environ.get("FIRSTLOOK_USE_OWN_EXAMPLE", "") == "1"      # off: a case never sees its own worked example
 
 
@@ -582,10 +583,13 @@ def decide(case_id: str, force: bool = False) -> dict:
     # Every policy record, the most relevant first, then the worked examples closest to this case.
     references = [r for r in found if r["case_id"] is None] + [r for r in found if r["case_id"] is not None][:EXAMPLES]
     said = case_reports.for_case(case)                         # what customers wrote, linked to each job
-    key = hashlib.sha1(json.dumps([case_id, jobs, sorted(r["digest"] for r in references), [r["text"] for r in said]],
+    key = hashlib.sha1(json.dumps([case_id, jobs, case["changes"], sorted(r["digest"] for r in references), [r["text"] for r in said]],
                                   default=str).encode()).hexdigest()[:16]
-    if case_id in _decisions and _decisions[case_id]["key"] == key and not force:
-        return _decisions[case_id]
+    if key in _memo and not force:                             # this exact situation has been ranked before
+        _decisions[case_id] = _memo[key]
+        return _memo[key]
+    names = {j["pole_id"]: f"the {j.get('equipment', 'pole')} at {j['facility_label']}" for j in jobs}
+    since = "".join(f"\nSince the first ranking: {names.get(ch['pole_id'], ch['pole_id'])} [{ch['pole_id']}] {ch['said']}." for ch in case["changes"])
     retrieve_ms = round((time.perf_counter() - started) * 1000)
 
     started = time.perf_counter()
@@ -593,7 +597,7 @@ def decide(case_id: str, force: bool = False) -> dict:
     for _attempt in range(2 if generator() == "claude-code" and references else 0):      # an unusable reply is asked for once more
         reply = _claude(DISPATCH_PROMPT.format(
             references="\n\n".join(f"[{n}] {r['title']}\n{r['body']}" for n, r in enumerate(references, 1)),
-            setup=case["setup"], jobs="\n".join(_job_line(j) for j in jobs), reports=case_reports.for_prompt(case, said)))
+            setup=case["setup"], since=since, jobs="\n".join(_job_line(j) for j in jobs), reports=case_reports.for_prompt(case, said)))
         start, end = (reply or "").find("{"), (reply or "").rfind("}")
         try:
             data = json.loads(reply[start:end + 1]) if reply and 0 <= start < end else None
@@ -631,12 +635,15 @@ def decide(case_id: str, force: bool = False) -> dict:
         "key": key, "case_id": case_id, "generator": by, "model": CLAUDE_MODEL if by == "claude-code" else None, **written,
         "references": [{"n": n, "title": r["title"], "text": r["body"], "example": r["case_id"] is not None, "used": n in written["refs"]}
                        for n, r in enumerate(references, 1)],
-        "expected": expected, "correct": written["action"] == expected["action"] and written["pole_id"] == expected["pole_id"],
+        # The expected answer belongs to the case as it was supplied. Once conditions have changed it no longer applies.
+        "expected": expected, "changed": bool(case["changes"]),
+        "correct": None if case["changes"] else written["action"] == expected["action"] and written["pole_id"] == expected["pole_id"],
         "rule": rule, "agrees_with_rule": written["action"] == rule["action"] and written["pole_id"] == rule["pole_id"],
         "own_example_hidden": not USE_OWN_EXAMPLE, "reports": case_reports.summary(said),
         "ms": {"retrieve": retrieve_ms, "generate": generate_ms},
     }
     _decisions[case_id] = result
+    _memo[key] = result
     db.log_plan(f"case:{case_id}", by, [written["pole_id"] or written["action"]], [r["ref"] for r in references], retrieve_ms, generate_ms)
     return result
 

@@ -31,6 +31,15 @@ export const api = {
   liwa: () => call('/liwa'),
   liwaPlan: (force = false) => call(`/liwa/plan${force ? '?force=true' : ''}`),
   cases: () => call('/cases'),
+  history: () => call('/history'),
+  // The PDF itself, as a file to save.
+  reportPdf: async (id) => {
+    const res = await fetch(`/api/history/${encodeURIComponent(id)}/report.pdf`)
+    if (!res.ok) throw new Error(`The server answered ${res.status}.`)
+    return res.blob()
+  },
+  caseCondition: (id, body) => call(`/cases/${encodeURIComponent(id)}/conditions`, body),
+  caseRestart: (id) => call(`/cases/${encodeURIComponent(id)}/restart`, {}),
   caseReports: (id) => call(`/cases/${encodeURIComponent(id)}/reports`),
   caseDecision: (id, force = false) => call(`/cases/${encodeURIComponent(id)}/decision${force ? '?force=true' : ''}`),
 }

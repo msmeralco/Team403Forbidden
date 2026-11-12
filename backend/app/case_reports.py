@@ -166,9 +166,16 @@ def _spread() -> tuple[int, ...]:
 
 
 def place_of(index: int) -> dict:
+    """Where the case at this position is drawn. A case added with its own place (Manila and other cities
+    outside the simulated sector) keeps it; the others are spread over the sector's barangays."""
+    found = cases.all_cases()
+    own = found[index].get("place") if index < len(found) else None
+    if own:
+        return {"area_id": None, "barangay": own["barangay"], "city": own["city"], "label": own["label"], "pos": [own["lat"], own["lon"]]}
     order = _spread()
     area = network.AREAS[order[index % len(order)]]
-    return {"area_id": area.id, "barangay": area.barangay, "city": area.city}
+    return {"area_id": area.id, "barangay": area.barangay, "city": area.city, "label": f"Brgy. {area.barangay}, {area.city.split(',')[0]}",
+            "pos": [area.lat, area.lon]}
 
 
 def index_of(case_id: str) -> int:
@@ -214,11 +221,12 @@ def _write(rng: np.random.Generator, source: str, kind: str, facility: str, ctx:
 
 
 def for_case(case: dict, index: int | None = None) -> list[dict]:
-    """Every report linked to the case's jobs, newest first."""
+    """Every report linked to the case's jobs, newest first. They were written when the interruption began,
+    so they follow the jobs as they were then, not as they stand after conditions changed."""
     place = place_of(index_of(case["id"]) if index is None else index)
     clear = R.all_clear_time()
     out: list[dict] = []
-    for job in case["jobs"]:
+    for job in cases.at_start(case["id"]) or case["jobs"]:
         seed = int(hashlib.sha1(f"{case['id']}/{job['pole_id']}".encode()).hexdigest()[:8], 16)
         rng = np.random.default_rng(seed)
         facility = _facility(job["facility_label"])

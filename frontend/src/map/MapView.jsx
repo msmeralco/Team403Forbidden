@@ -57,9 +57,9 @@ export default function MapView({ state, layers, focus, padLeft, mobile, typhoon
           <TyphoonLayer track={typhoon.track} running={typhoon.running} home={bounds} onTick={typhoon.onTick} onDone={typhoon.onDone} pad={pad} />
         ) : (
           <>
-            <ZoneFocus center={zone?.pos} km={ZONE_KM} />
+            <ZoneFocus center={plan?.center} km={ZONE_KM} />
             <GridLayer state={state} sel={zone ? { kind: 'area', id: zone.id } : null} show={layers.grid} offices={layers.offices}
-              zoneKm={ZONE_KM} plain onError={onError} />
+              zoneKm={ZONE_KM} zoneAt={plan && !zone ? plan.center : null} plain onError={onError} />
             <RouteLayer from={target ? plan.office?.pos : null} to={target} onRoute={onRoute} />
             {layers.cases && <CaseLayer cases={cases} areas={state.areas} offices={offices} openId={openId} active={active} resolved={resolved}
               onOpen={onSelectCase} onPickPole={onPickPole} />}

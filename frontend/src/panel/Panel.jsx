@@ -4,7 +4,7 @@ import { Back, Close, Menu, Search } from '../icons'
 import { CaseDetail, CaseList } from './Cases'
 import { layout } from '../map/cases'
 
-export default function Panel({ state, cases, offices, sel, open, back, close, onMenu, sheet, setSheet, caseBusy, caseError, onDecideCase, rank, active, route, told, onPickPole, onResolve, onUndo }) {
+export default function Panel({ state, cases, offices, sel, open, back, close, onMenu, sheet, setSheet, caseBusy, caseError, onDecideCase, rank, active, route, told, shift, onPickPole, onResolve, onUndo, onChange, onRestart }) {
   const [q, setQ] = useState('')
   const scroller = useRef(null)
   useEffect(() => { if (scroller.current) scroller.current.scrollTop = 0 }, [sel?.id])
@@ -33,7 +33,8 @@ export default function Panel({ state, cases, offices, sel, open, back, close, o
               <span>Power interruption</span>
               <button className="icon-btn" onClick={close} aria-label="Close"><Close size={16} /></button>
             </div>
-            <CaseDetail key={sel.id} c={cases[index]} plan={layout(cases[index], index, state.areas, offices)} rank={rank} active={active} route={route} told={told}
+            <CaseDetail key={sel.id} c={cases[index]} plan={layout(cases[index], index, state.areas, offices)} rank={rank} active={active} route={route} told={told} shift={shift}
+              onChange={(pole, what) => onChange(sel.id, pole, what)} onRestart={() => onRestart(sel.id)}
               busy={caseBusy === sel.id} error={caseError} onDecide={(force) => onDecideCase(sel.id, force)}
               onPick={onPickPole} onResolve={(pole) => onResolve(sel.id, pole)} onUndo={(pole) => onUndo(sel.id, pole)} />
           </>

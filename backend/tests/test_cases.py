@@ -26,9 +26,10 @@ def guidance(monkeypatch):
 
 def test_the_cases_load_with_their_jobs_and_expected_answers():
     found = cases.all_cases()
-    assert [c["id"] for c in found] == [f"case-{n:02d}" for n in range(1, 14)]
+    assert [c["id"] for c in found] == [f"case-{n:02d}" for n in range(1, 21)]
+    assert [c["added"] for c in found] == [False] * 13 + [True] * 7
     first = found[0]
-    assert first["title"] == "Safety first" and first["expected"] == {
+    assert first["scenario"] == "Safety first" and first["title"].startswith("Hospital and evacuation center out") and first["expected"] == {
         "action": "DISPATCH", "pole_id": "P-EVAC", "reason": "Send the truck to the evacuation center pole and hold the hospital pole job."}
     supplied = [j for j in first["jobs"] if not j["extra"]]
     assert {j["pole_id"]: (j["safety"], j["tier_name"]) for j in supplied} == {"P-EVAC": ("safe", "Critical"), "P-HOSP": ("unsafe", "Critical")}
@@ -47,6 +48,10 @@ def test_extra_poles_give_every_case_more_to_rank_without_changing_an_answer():
     assert {j["equipment"] for c in found for j in c["jobs"]} == {"pole", "transformer", "line"}
     assert all(j["equipment"] == "pole" for c in found for j in c["jobs"] if not j["extra"])
     assert all(any(j["extra"] for j in c["jobs"]) for c in found)
+    assert all(c["title"] != c["scenario"] and len(c["title"]) <= 90 for c in found)       # every case has a plain title
+    assert all(all(j["extra"] for j in c["jobs"]) and c["place"]["city"] for c in found if c["added"])
+    assert {c["place"]["city"] for c in found if c["added"]} == {"Manila", "Makati", "Pasig", "Marikina", "Taguig", "Caloocan"}
+    assert sum(c["expected"]["action"] == "HOLD" for c in found) == 2
     for c in found:                                            # the rule is recomputed over all the poles, added ones included
         assert (c["rule"]["action"], c["rule"]["pole_id"]) == (c["expected"]["action"], c["expected"]["pole_id"]), c["id"]
         assert len(c["rule"]["order"]) == len(set(c["rule"]["order"]))
@@ -59,6 +64,7 @@ def test_without_the_extra_poles_the_cases_are_as_supplied(monkeypatch):
     cases.reload()
     try:
         found = cases.all_cases()
+        assert len(found) == 13 and all(c["title"] == c["scenario"] and not c["added"] for c in found)
         assert sum(len(c["jobs"]) for c in found) == 30 and not any(j["extra"] for c in found for j in c["jobs"])
         assert all((c["rule"]["action"], c["rule"]["pole_id"]) == (c["expected"]["action"], c["expected"]["pole_id"]) for c in found)
     finally:
@@ -189,8 +195,10 @@ def test_every_job_has_as_many_reports_as_the_case_says():
 
 
 def test_each_case_is_drawn_in_its_own_barangay():
-    places = [case_reports.place_of(i)["area_id"] for i in range(13)]
-    assert len(set(places)) == 13 and case_reports.place_of(0)["barangay"]
+    places = [case_reports.place_of(i) for i in range(20)]
+    assert len({p["label"] for p in places}) == 20 and len({tuple(p["pos"]) for p in places}) == 20
+    assert all(p["area_id"] for p in places[:13]) and not any(p["area_id"] for p in places[13:])
+    assert places[13]["label"] == "Sampaloc, Manila" and places[0]["label"].startswith("Brgy. ")
 
 
 def test_liwa_reads_the_reports_and_always_gets_every_policy_record(guidance, monkeypatch):
@@ -215,6 +223,67 @@ def test_liwa_reads_the_reports_and_always_gets_every_policy_record(guidance, mo
     assert out["report_note"].startswith("One person reports a spark") and out["reports"]["total"] == sum(j["report_count"] for j in first["jobs"])
 
 
+def test_when_conditions_change_the_case_is_ranked_as_it_now_stands(guidance):
+    try:
+        before = cases.find("case-17")                                             # flood and unsafe roads: nothing can be worked on
+        assert before["rule"]["action"] == "HOLD" and before["changes"] == []
+        told = case_reports.for_case(before)
+        first = liwa.decide("case-17")
+        assert first["action"] == "HOLD" and first["correct"] is True and first["changed"] is False
+
+        after = cases.change("case-17", "P-HOSP", "flood_cleared")                 # the water goes down at the hospital
+        job = next(j for j in after["jobs"] if j["pole_id"] == "P-HOSP")
+        assert job["flood_status"] == "clear" and job["scope_note"] is None and job["eta_seconds"]
+        assert after["rule"] == {"action": "DISPATCH", "pole_id": "P-HOSP", "order": ["P-HOSP"]}
+        assert after["changes"] == [{"pole_id": "P-HOSP", "what": "flood_cleared", "said": "is clear of flood and cleared for restoration"}]
+        second = liwa.decide("case-17")
+        assert (second["action"], second["pole_id"]) == ("DISPATCH", "P-HOSP") and second["key"] != first["key"]
+        assert second["changed"] is True and second["correct"] is None and second["agrees_with_rule"]     # the old expected answer no longer applies
+        assert case_reports.for_case(after) == told                                # what customers wrote does not change
+
+        safe = cases.change("case-17", "P-EVAC", "safe")                           # a site with no way in gets a driving time
+        evac = next(j for j in safe["jobs"] if j["pole_id"] == "P-EVAC")
+        assert evac["safety"] == "safe" and 300 <= evac["eta_seconds"] <= 1020 and safe["rule"]["order"] == ["P-HOSP", "P-EVAC"]
+        gone = cases.change("case-17", "P-HOSP", "unsafe")
+        assert gone["rule"]["pole_id"] == "P-EVAC" and next(j for j in gone["jobs"] if j["pole_id"] == "P-HOSP")["eta_seconds"] is None
+        done = cases.change("case-17", "P-EVAC", "done")
+        assert done["rule"]["action"] == "HOLD" and len(done["changes"]) == 4
+
+        back = cases.restart("case-17")
+        assert back == before and liwa.decide("case-17") is first                  # the same situation is not ranked twice
+        with pytest.raises(KeyError):
+            cases.change("case-17", "P-NOPE", "safe")
+        with pytest.raises(ValueError):
+            cases.change("case-17", "P-HOSP", "teleport")
+    finally:
+        cases.reload()
+
+
+def test_liwa_is_told_what_changed(guidance, monkeypatch):
+    seen = {}
+
+    def fake(prompt):
+        seen["prompt"] = prompt
+        return json.dumps({"action": "DISPATCH", "pole_id": "P-HOSP", "reason": "Now safe and Critical.", "order": ["P-HOSP", "P-EVAC"]})
+
+    monkeypatch.setattr(liwa, "generator", lambda: "claude-code")
+    monkeypatch.setattr(liwa, "_claude", fake)
+    try:
+        cases.change("case-01", "P-HOSP", "safe")
+        out = liwa.decide("case-01")
+        assert "Since the first ranking: the pole at Hospital [P-HOSP] is now safe for the crew." in seen["prompt"]
+        assert out["changed"] and out["correct"] is None and out["pole_id"] == "P-HOSP"
+        c = TestClient(app)
+        again = c.post("/api/cases/case-01/restart").json()
+        assert again["changes"] == [] and again["place"]["label"] and again["decision"] is None
+        moved = c.post("/api/cases/case-01/conditions", json={"pole_id": "P-HOSP", "change": "safe", "done": ["P-EVAC"]}).json()
+        assert [ch["what"] for ch in moved["changes"]] == ["done", "safe"] and moved["rule"]["pole_id"] == "P-HOSP"
+        assert c.post("/api/cases/case-01/conditions", json={"pole_id": "P-HOSP", "change": "explode"}).status_code == 422
+        assert c.post("/api/cases/case-99/conditions", json={"pole_id": "P-HOSP", "change": "safe"}).status_code == 404
+    finally:
+        cases.reload()
+
+
 def test_a_wrong_answer_is_reported_as_wrong(guidance, monkeypatch):
     monkeypatch.setattr(liwa, "generator", lambda: "claude-code")
     monkeypatch.setattr(liwa, "_claude", lambda prompt: json.dumps({"action": "DISPATCH", "pole_id": "P-HOSP", "reason": "Hospitals first."}))
@@ -226,7 +295,7 @@ def test_a_wrong_answer_is_reported_as_wrong(guidance, monkeypatch):
 def test_endpoints(guidance):
     c = TestClient(app)
     listed = c.get("/api/cases").json()
-    assert len(listed["cases"]) == 13 and listed["tiers"] == {"1": "Critical", "2": "Community services", "3": "Residential"}
+    assert len(listed["cases"]) == 20 and listed["tiers"] == {"1": "Critical", "2": "Community services", "3": "Residential"}
     assert listed["cases"][0]["decision"] is None and listed["generator"] == "offline"
     assert listed["cases"][0]["place"]["area_id"] and listed["cases"][0]["place"]["barangay"]
     told = c.get("/api/cases/case-01/reports").json()

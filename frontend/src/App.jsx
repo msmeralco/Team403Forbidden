@@ -6,10 +6,11 @@ import L from 'leaflet'
 import { api } from './api'
 import MapView from './map/MapView'
 import { NETWORK_NOTE, OFFICE_NOTE } from './map/GridLayer'
-import { EQUIPMENT_ICON, EQUIPMENT_NAME, layout as caseLayout, ranking } from './map/cases'
+import { EQUIPMENT_ICON, EQUIPMENT_NAME, layout as caseLayout, ranking, standing } from './map/cases'
 import Panel from './panel/Panel'
 import Assistant from './assistant/Assistant'
 import TyphoonPanel from './typhoon/TyphoonPanel'
+import Records from './records/Records'
 import { makeTrack } from './typhoon/track'
 import { Mark, Meralco, Wordmark } from './Logo'
 import { Alert, Bell, Close, Landmark, Office, Pylon } from './icons'
@@ -86,7 +87,7 @@ function Legend({ layers, zone, folded }) {
   )
 }
 
-function Drawer({ open, onClose, basemap, onReplay }) {
+function Drawer({ open, onClose, basemap, onReplay, onPage }) {
   if (!open) return null
   return (
     <div className="drawer-wrap" onClick={onClose}>
@@ -94,6 +95,8 @@ function Drawer({ open, onClose, basemap, onReplay }) {
         <div className="drawer-head"><Wordmark /><button className="icon-btn" onClick={onClose} aria-label="Close menu"><Close size={16} /></button></div>
         <div className="drawer-group">
           <button className="drawer-item" onClick={() => { onReplay(); onClose() }}><strong>Replay the typhoon</strong><span>Shows the storm crossing Luzon again, on a new track</span></button>
+          <button className="drawer-item" onClick={() => { onPage('history'); onClose() }}><strong>History</strong><span>Past typhoons: what happened and how fast power came back</span></button>
+          <button className="drawer-item" onClick={() => { onPage('reports'); onClose() }}><strong>Reports</strong><span>Export a PDF report for any typhoon</span></button>
         </div>
         <p className="drawer-foot muted small">
           {basemap === 'google' ? 'Map: Google Maps.' : 'Map: free OpenStreetMap map. Add a Google Maps key to frontend/.env.local to switch.'}
@@ -123,8 +126,10 @@ export default function App() {
   const [picked, setPicked] = useState(null)            // the pole whose route was asked for; none = the first in the order
   const [route, setRoute] = useState(null)              // where the drawn route came from: loading | google | osm | none
   const [told, setTold] = useState({})                  // per interruption: what customers reported
+  const [shift, setShift] = useState({})                // per interruption: the last change of conditions, and where everything stood before it
   const [layers, setLayers] = useState({ cases: true, landmarks: false, grid: false, offices: false })
   const [menu, setMenu] = useState(false)
+  const [page, setPage] = useState(null)                // the records page over the map: history | reports
   const [notesOpen, setNotesOpen] = useState(false)
   const [notes, setNotes] = useState([])
   const [toasts, setToasts] = useState([])
@@ -189,6 +194,39 @@ export default function App() {
   const active = rank ? (rank.go.find((j) => j.pole_id === picked) ?? rank.go[0])?.pole_id ?? null : null
   const resolve = (id, pole) => { setResolved((r) => ({ ...r, [id]: [...(r[id] ?? []), pole] })); setPicked(null) }
   const undo = (id, pole) => { setResolved((r) => ({ ...r, [id]: (r[id] ?? []).filter((p) => p !== pole) })); setPicked(null) }
+  // Conditions changed at one piece of equipment (made safe, flood cleared, not safe after all): the server records it
+  // and Liwa ranks the interruption again as it now stands. What was resolved on screen is recorded at the same time.
+  const changeCondition = async (id, pole, change) => {
+    const now = cases.find((c) => c.id === id)
+    const before = now?.decision ? standing(ranking(now, resolved[id] ?? NONE)) : {}
+    setCaseBusy(id); setCaseError(null); setPicked(null)
+    try {
+      const next = await api.caseCondition(id, { pole_id: pole, change, done: resolved[id] ?? [] })
+      setResolved((r) => ({ ...r, [id]: [] }))
+      setShift((s) => ({ ...s, [id]: { pole, change, before } }))
+      setCases((list) => list.map((c) => (c.id === id ? next : c)))
+      const decision = await api.caseDecision(id)
+      setCases((list) => list.map((c) => (c.id === id ? { ...c, decision } : c)))
+      setLastDecision(decision)
+    } catch (e) {
+      setCaseError(e.message)
+    }
+    setCaseBusy(null)
+  }
+  const restartCase = async (id) => {
+    setCaseBusy(id); setCaseError(null); setPicked(null)
+    try {
+      const next = await api.caseRestart(id)
+      setResolved((r) => ({ ...r, [id]: [] }))
+      setShift((s) => ({ ...s, [id]: null }))
+      setCases((list) => list.map((c) => (c.id === id ? next : c)))
+      const decision = await api.caseDecision(id)
+      setCases((list) => list.map((c) => (c.id === id ? { ...c, decision } : c)))
+    } catch (e) {
+      setCaseError(e.message)
+    }
+    setCaseBusy(null)
+  }
   useEffect(() => {
     if (openCase && !openCase.decision && !caseBusy) decideCase(openCase.id)
     if (openCase && !told[openCase.id]) api.caseReports(openCase.id).then((d) => setTold((t) => ({ ...t, [d.case_id]: d }))).catch(() => {})
@@ -197,7 +235,7 @@ export default function App() {
   // Where the map looks: every interruption at once, or the open one's zone together with the office the crew comes from.
   const focus = useMemo(() => {
     if (!state || phase !== 'after' || !cases.length) return null
-    if (!sel) return { key: 'all', bounds: L.latLngBounds(state.areas.map((a) => a.pos)), maxZoom: 12 }
+    if (!sel) return { key: `all-${cases.length}`, bounds: L.latLngBounds([...state.areas.map((a) => a.pos), ...cases.map((c) => c.place?.pos).filter(Boolean)]), maxZoom: 12 }
     const index = cases.findIndex((c) => c.id === sel.id)
     if (index < 0) return null
     const plan = caseLayout(cases[index], index, state.areas, offices)
@@ -245,7 +283,8 @@ export default function App() {
           <Panel state={state} cases={cases} offices={offices} sel={sel} open={open} back={close} close={close}
             onMenu={() => setMenu(true)} sheet={sheet} setSheet={setSheet}
             caseBusy={caseBusy} caseError={caseError} onDecideCase={decideCase}
-            rank={rank} active={active} route={route} told={openCase ? told[openCase.id] : null}
+            rank={rank} active={active} route={route} told={openCase ? told[openCase.id] : null} shift={openCase ? shift[openCase.id] : null}
+            onChange={changeCondition} onRestart={restartCase}
             onPickPole={setPicked} onResolve={resolve} onUndo={undo} />
           <div className="map-chips" role="group" aria-label="Map layers">
             {chips.map(([k, label, Icon]) => (
@@ -277,7 +316,8 @@ export default function App() {
         )}
       </div>
 
-      <Drawer open={menu} onClose={() => setMenu(false)} basemap={basemap} onReplay={replay} />
+      <Drawer open={menu} onClose={() => setMenu(false)} basemap={basemap} onReplay={replay} onPage={setPage} />
+      {page && <Records tab={page} onTab={setPage} onClose={() => setPage(null)} />}
     </div>
   )
 }

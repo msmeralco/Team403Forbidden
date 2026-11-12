@@ -1,136 +1,1697 @@
 {
-  "about": "Extra equipment added to the team's test cases so that each interruption has ten or eleven things to rank in the demo. meralco_demo.sqlite is not changed: these rows are added to a working copy in memory when the server starts. Every row is chosen so that the case's expected answer stays the same (backend/tests/test_cases.py checks this). Delete this file, or set FIRSTLOOK_EXTRA_POLES=off, to run the cases exactly as supplied. Fields left out take the table's defaults: safety safe, status pending, work_type restore, flood_status clear, no ETA, no distance. \"equipment\" is not a column of the table: it says what kind of equipment the job is on (pole when left out, transformer, or line) and is only used for the name on screen and in Liwa's prompt.",
-  "poles": {
-    "case-01": [
-      {"pole_id": "P-MARKET", "facility_label": "Public market", "tier": 2, "customers_restored": 25, "report_count": 8, "eta_seconds": 420},
-      {"pole_id": "P-SCHOOL", "facility_label": "School", "tier": 2, "customers_restored": 14, "report_count": 5, "eta_seconds": 540},
-      {"pole_id": "P-HOMES-A", "facility_label": "Residential area A", "tier": 3, "customers_restored": 60, "report_count": 22, "eta_seconds": 300},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "safety": "unsafe", "customers_restored": 35, "report_count": 9},
-      {"pole_id": "P-APT", "facility_label": "Apartment block", "tier": 3, "customers_restored": 18, "report_count": 4, "eta_seconds": 780},
-      {"pole_id": "T-HALL", "equipment": "transformer", "facility_label": "Barangay hall", "tier": 2, "customers_restored": 10, "report_count": 3, "eta_seconds": 480},
-      {"pole_id": "P-HS", "facility_label": "High school", "tier": 2, "safety": "unsafe", "customers_restored": 22, "report_count": 7},
-      {"pole_id": "T-HOMES-C", "equipment": "transformer", "facility_label": "Residential area C", "tier": 3, "customers_restored": 42, "report_count": 11, "eta_seconds": 360},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 9, "report_count": 2, "eta_seconds": 660}
-    ],
-    "case-02": [
-      {"pole_id": "P-MARKET", "facility_label": "Public market", "tier": 2, "customers_restored": 15, "report_count": 7, "eta_seconds": 660},
-      {"pole_id": "P-HALL", "facility_label": "Barangay hall", "tier": 2, "customers_restored": 6, "report_count": 3, "eta_seconds": 480},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "customers_restored": 45, "report_count": 12, "eta_seconds": 360},
-      {"pole_id": "P-APT", "facility_label": "Apartment block", "tier": 3, "customers_restored": 30, "report_count": 5, "eta_seconds": 540},
-      {"pole_id": "T-SCHOOL", "equipment": "transformer", "facility_label": "School", "tier": 2, "customers_restored": 11, "report_count": 4, "eta_seconds": 420},
-      {"pole_id": "T-HOMES-C", "equipment": "transformer", "facility_label": "Residential area C", "tier": 3, "customers_restored": 38, "report_count": 9, "eta_seconds": 300},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 12, "report_count": 3, "eta_seconds": 720},
-      {"pole_id": "P-HOMES-E", "facility_label": "Residential area E", "tier": 3, "safety": "unsafe", "customers_restored": 26, "report_count": 8}
-    ],
-    "case-03": [
-      {"pole_id": "P-SCHOOL", "facility_label": "School", "tier": 2, "customers_restored": 18, "report_count": 6, "eta_seconds": 420},
-      {"pole_id": "P-MARKET", "facility_label": "Public market", "tier": 2, "customers_restored": 12, "report_count": 4, "eta_seconds": 600},
-      {"pole_id": "P-HOMES-A", "facility_label": "Residential area A", "tier": 3, "customers_restored": 55, "report_count": 20, "eta_seconds": 300},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "customers_restored": 24, "report_count": 8, "eta_seconds": 720},
-      {"pole_id": "P-APT", "facility_label": "Apartment block", "tier": 3, "safety": "unsafe", "customers_restored": 16, "report_count": 3},
-      {"pole_id": "T-HALL", "equipment": "transformer", "facility_label": "Barangay hall", "tier": 2, "customers_restored": 9, "report_count": 3, "eta_seconds": 540},
-      {"pole_id": "T-HOMES-C", "equipment": "transformer", "facility_label": "Residential area C", "tier": 3, "customers_restored": 33, "report_count": 10, "eta_seconds": 480},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 7, "report_count": 2, "eta_seconds": 840},
-      {"pole_id": "T-HOMES-E", "equipment": "transformer", "facility_label": "Residential area E", "tier": 3, "customers_restored": 28, "report_count": 9, "eta_seconds": 600, "flood_status": "flooded_hold", "scope_note": "Street still flooded. Restoration awaits clearance."}
-    ],
-    "case-04": [
-      {"pole_id": "P-HOSP", "facility_label": "Hospital", "tier": 1, "status": "completed", "customers_restored": 41, "report_count": 6},
-      {"pole_id": "P-MARKET", "facility_label": "Public market", "tier": 2, "customers_restored": 12, "report_count": 15, "eta_seconds": 300},
-      {"pole_id": "P-HOMES-A", "facility_label": "Residential area A", "tier": 3, "customers_restored": 70, "report_count": 25, "eta_seconds": 240},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "customers_restored": 30, "report_count": 10, "eta_seconds": 480},
-      {"pole_id": "P-APT", "facility_label": "Apartment block", "tier": 3, "safety": "unsafe", "customers_restored": 20, "report_count": 5},
-      {"pole_id": "P-EVAC", "facility_label": "Evacuation center", "tier": 1, "status": "completed", "customers_restored": 11, "report_count": 3},
-      {"pole_id": "T-HS", "equipment": "transformer", "facility_label": "High school", "tier": 2, "customers_restored": 16, "report_count": 6, "eta_seconds": 540},
-      {"pole_id": "T-HOMES-C", "equipment": "transformer", "facility_label": "Residential area C", "tier": 3, "customers_restored": 44, "report_count": 13, "eta_seconds": 360},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 10, "report_count": 3, "eta_seconds": 600}
-    ],
-    "case-05": [
-      {"pole_id": "P-SCHOOL", "facility_label": "School", "tier": 2, "customers_restored": 15, "report_count": 6, "eta_seconds": 600, "distance_meters": 2500},
-      {"pole_id": "P-HALL", "facility_label": "Barangay hall", "tier": 2, "customers_restored": 8, "report_count": 2, "eta_seconds": 420, "distance_meters": 1200},
-      {"pole_id": "P-HOMES-A", "facility_label": "Residential area A", "tier": 3, "customers_restored": 50, "report_count": 14, "eta_seconds": 300, "distance_meters": 800},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "customers_restored": 25, "report_count": 9, "eta_seconds": 900, "distance_meters": 3000},
-      {"pole_id": "T-MARKET", "equipment": "transformer", "facility_label": "Public market", "tier": 2, "customers_restored": 12, "report_count": 5, "eta_seconds": 540, "distance_meters": 1800},
-      {"pole_id": "T-HOMES-C", "equipment": "transformer", "facility_label": "Residential area C", "tier": 3, "customers_restored": 36, "report_count": 10, "eta_seconds": 480, "distance_meters": 1500},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 8, "report_count": 2, "eta_seconds": 720, "distance_meters": 2800},
-      {"pole_id": "P-APT", "facility_label": "Apartment block", "tier": 3, "safety": "unsafe", "customers_restored": 18, "report_count": 6}
-    ],
-    "case-06": [
-      {"pole_id": "P-MARKET", "facility_label": "Public market", "tier": 2, "safety": "unsafe", "customers_restored": 30, "report_count": 11},
-      {"pole_id": "P-HALL", "facility_label": "Barangay hall", "tier": 2, "customers_restored": 4, "report_count": 5, "eta_seconds": 300},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "customers_restored": 40, "report_count": 12, "eta_seconds": 420},
-      {"pole_id": "P-HS", "facility_label": "High school", "tier": 2, "safety": "unsafe", "customers_restored": 25, "report_count": 8},
-      {"pole_id": "T-HOMES-C", "equipment": "transformer", "facility_label": "Residential area C", "tier": 3, "customers_restored": 28, "report_count": 9, "eta_seconds": 360},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 11, "report_count": 3, "eta_seconds": 540},
-      {"pole_id": "T-APT", "equipment": "transformer", "facility_label": "Apartment block", "tier": 3, "customers_restored": 15, "report_count": 4, "eta_seconds": 660}
-    ],
-    "case-07": [
-      {"pole_id": "P-EVAC", "facility_label": "Evacuation center", "tier": 1, "status": "completed", "customers_restored": 11, "report_count": 3},
-      {"pole_id": "P-HALL", "facility_label": "Barangay hall", "tier": 2, "safety": "unsafe", "customers_restored": 20, "report_count": 9},
-      {"pole_id": "P-HOMES-C", "facility_label": "Residential area C", "tier": 3, "safety": "unsafe", "customers_restored": 30, "report_count": 8},
-      {"pole_id": "P-MARKET", "facility_label": "Public market", "tier": 2, "safety": "unsafe", "customers_restored": 15, "report_count": 6},
-      {"pole_id": "T-APT", "equipment": "transformer", "facility_label": "Apartment block", "tier": 3, "customers_restored": 4, "report_count": 2, "eta_seconds": 420},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 3, "report_count": 1, "eta_seconds": 540},
-      {"pole_id": "T-HOMES-E", "equipment": "transformer", "facility_label": "Residential area E", "tier": 3, "customers_restored": 18, "report_count": 5, "eta_seconds": 480, "flood_status": "flooded_hold", "scope_note": "Street still flooded. Restoration awaits clearance."}
-    ],
-    "case-08": [
-      {"pole_id": "P-EVAC", "facility_label": "Evacuation center", "tier": 1, "safety": "unsafe", "customers_restored": 11, "report_count": 3},
-      {"pole_id": "P-HALL", "facility_label": "Barangay hall", "tier": 2, "safety": "unsafe", "customers_restored": 9, "report_count": 5},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "safety": "unsafe", "customers_restored": 28, "report_count": 7},
-      {"pole_id": "T-MARKET", "equipment": "transformer", "facility_label": "Public market", "tier": 2, "safety": "unsafe", "customers_restored": 14, "report_count": 6},
-      {"pole_id": "L-HOMES-C", "equipment": "line", "facility_label": "Residential area C", "tier": 3, "safety": "unsafe", "customers_restored": 19, "report_count": 5},
-      {"pole_id": "T-APT", "equipment": "transformer", "facility_label": "Apartment block", "tier": 3, "safety": "unsafe", "customers_restored": 10, "report_count": 3},
-      {"pole_id": "P-HOMES-D", "facility_label": "Residential area D", "tier": 3, "status": "completed", "customers_restored": 16, "report_count": 4}
-    ],
-    "case-09": [
-      {"pole_id": "P-MARKET", "facility_label": "Public market", "tier": 2, "customers_restored": 14, "report_count": 6, "eta_seconds": 600},
-      {"pole_id": "P-HALL", "facility_label": "Barangay hall", "tier": 2, "customers_restored": 10, "report_count": 4, "eta_seconds": 480},
-      {"pole_id": "P-HOMES-A", "facility_label": "Residential area A", "tier": 3, "customers_restored": 65, "report_count": 18, "eta_seconds": 300},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "customers_restored": 20, "report_count": 5, "eta_seconds": 540},
-      {"pole_id": "T-HS", "equipment": "transformer", "facility_label": "High school", "tier": 2, "customers_restored": 8, "report_count": 2, "eta_seconds": 720},
-      {"pole_id": "T-HOMES-C", "equipment": "transformer", "facility_label": "Residential area C", "tier": 3, "customers_restored": 34, "report_count": 9, "eta_seconds": 420},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 6, "report_count": 2, "eta_seconds": 660},
-      {"pole_id": "P-APT", "facility_label": "Apartment block", "tier": 3, "safety": "unsafe", "customers_restored": 24, "report_count": 7}
-    ],
-    "case-10": [
-      {"pole_id": "P-SCHOOL", "facility_label": "School", "tier": 2, "customers_restored": 16, "report_count": 5, "eta_seconds": 540},
-      {"pole_id": "P-HALL", "facility_label": "Barangay hall", "tier": 2, "customers_restored": 7, "report_count": 2, "eta_seconds": 300},
-      {"pole_id": "P-HOMES-A", "facility_label": "Residential area A", "tier": 3, "customers_restored": 48, "report_count": 15, "eta_seconds": 360},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "customers_restored": 30, "report_count": 10, "eta_seconds": 480, "flood_status": "flooded_hold", "scope_note": "Street still flooded. Restoration awaits clearance."},
-      {"pole_id": "T-MARKET", "equipment": "transformer", "facility_label": "Public market", "tier": 2, "customers_restored": 13, "report_count": 4, "eta_seconds": 480},
-      {"pole_id": "T-HOMES-C", "equipment": "transformer", "facility_label": "Residential area C", "tier": 3, "customers_restored": 31, "report_count": 8, "eta_seconds": 420},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 9, "report_count": 3, "eta_seconds": 600},
-      {"pole_id": "P-APT", "facility_label": "Apartment block", "tier": 3, "safety": "unsafe", "customers_restored": 17, "report_count": 5}
-    ],
-    "case-11": [
-      {"pole_id": "P-MARKET", "facility_label": "Public market", "tier": 2, "customers_restored": 18, "report_count": 7, "eta_seconds": 420},
-      {"pole_id": "P-SCHOOL", "facility_label": "School", "tier": 2, "customers_restored": 9, "report_count": 3, "eta_seconds": 660},
-      {"pole_id": "P-HOMES-A", "facility_label": "Residential area A", "tier": 3, "customers_restored": 52, "report_count": 16, "eta_seconds": 300},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "customers_restored": 26, "report_count": 8, "eta_seconds": 540, "flood_status": "flooded_hold", "scope_note": "Low-lying street still flooded. Restoration awaits clearance."},
-      {"pole_id": "T-HALL", "equipment": "transformer", "facility_label": "Barangay hall", "tier": 2, "customers_restored": 6, "report_count": 2, "eta_seconds": 540},
-      {"pole_id": "T-HOMES-C", "equipment": "transformer", "facility_label": "Residential area C", "tier": 3, "customers_restored": 29, "report_count": 9, "eta_seconds": 420},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 11, "report_count": 3, "eta_seconds": 780},
-      {"pole_id": "P-APT", "facility_label": "Apartment block", "tier": 3, "safety": "unsafe", "customers_restored": 21, "report_count": 6}
-    ],
-    "case-12": [
-      {"pole_id": "P-HALL", "facility_label": "Barangay hall", "tier": 2, "customers_restored": 12, "report_count": 4, "eta_seconds": 480},
-      {"pole_id": "P-SCHOOL", "facility_label": "School", "tier": 2, "safety": "unsafe", "customers_restored": 20, "report_count": 6},
-      {"pole_id": "P-HOMES-A", "facility_label": "Residential area A", "tier": 3, "customers_restored": 44, "report_count": 13, "eta_seconds": 360},
-      {"pole_id": "P-APT", "facility_label": "Apartment block", "tier": 3, "customers_restored": 20, "report_count": 5, "eta_seconds": 600},
-      {"pole_id": "T-MARKET", "equipment": "transformer", "facility_label": "Public market", "tier": 2, "customers_restored": 17, "report_count": 6, "eta_seconds": 420},
-      {"pole_id": "T-HOMES-B", "equipment": "transformer", "facility_label": "Residential area B", "tier": 3, "customers_restored": 27, "report_count": 8, "eta_seconds": 480},
-      {"pole_id": "L-HOMES-C", "equipment": "line", "facility_label": "Residential area C", "tier": 3, "customers_restored": 8, "report_count": 2, "eta_seconds": 720},
-      {"pole_id": "P-HOMES-D", "facility_label": "Residential area D", "tier": 3, "customers_restored": 23, "report_count": 7, "eta_seconds": 540, "flood_status": "flooded_hold", "scope_note": "Street still flooded. Restoration awaits clearance."}
-    ],
-    "case-13": [
-      {"pole_id": "P-EVAC", "facility_label": "Evacuation center", "tier": 1, "safety": "unsafe", "customers_restored": 11, "report_count": 4},
-      {"pole_id": "P-MARKET", "facility_label": "Public market", "tier": 2, "customers_restored": 18, "report_count": 6, "eta_seconds": 480},
-      {"pole_id": "P-HALL", "facility_label": "Barangay hall", "tier": 2, "customers_restored": 8, "report_count": 2, "eta_seconds": 720},
-      {"pole_id": "P-HOMES-A", "facility_label": "Residential area A", "tier": 3, "customers_restored": 36, "report_count": 11, "eta_seconds": 300},
-      {"pole_id": "P-HOMES-B", "facility_label": "Residential area B", "tier": 3, "customers_restored": 22, "report_count": 9, "eta_seconds": 420, "flood_status": "flooded_hold", "scope_note": "Street still flooded. Restoration awaits clearance."},
-      {"pole_id": "T-SCHOOL", "equipment": "transformer", "facility_label": "School", "tier": 2, "customers_restored": 12, "report_count": 4, "eta_seconds": 600},
-      {"pole_id": "T-HOMES-C", "equipment": "transformer", "facility_label": "Residential area C", "tier": 3, "customers_restored": 30, "report_count": 8, "eta_seconds": 360},
-      {"pole_id": "L-HOMES-D", "equipment": "line", "facility_label": "Residential area D", "tier": 3, "customers_restored": 7, "report_count": 2, "eta_seconds": 660},
-      {"pole_id": "P-APT", "facility_label": "Apartment block", "tier": 3, "safety": "unsafe", "customers_restored": 19, "report_count": 5}
-    ]
+ "about": "Additions to the team's test cases, kept out of meralco_demo.sqlite (that file is never changed): everything here is added to a working copy in memory when the server starts. Delete this file, or set FIRSTLOOK_EXTRA_POLES=off, to run the cases exactly as supplied. Three parts. \"poles\": extra equipment for the 13 supplied cases, so each has ten or eleven things to rank; every row is chosen so that the case's expected answer stays the same. \"cases\": seven more cases written for this build (case-14 to case-20), each with its own expected answer, which must be the answer the database's own rule gives. \"titles\": a plain title for every case, shown on screen instead of the scenario name. backend/tests/test_cases.py checks all of this. Fields left out of a pole take the table's defaults: safety safe, status pending, work_type restore, flood_status clear, no ETA, no distance. \"equipment\" is not a column of the table: it says what kind of equipment the job is on (pole when left out, transformer, or line).",
+ "poles": {
+  "case-01": [
+   {
+    "pole_id": "P-MARKET",
+    "facility_label": "Public market",
+    "tier": 2,
+    "customers_restored": 25,
+    "report_count": 8,
+    "eta_seconds": 420
+   },
+   {
+    "pole_id": "P-SCHOOL",
+    "facility_label": "School",
+    "tier": 2,
+    "customers_restored": 14,
+    "report_count": 5,
+    "eta_seconds": 540
+   },
+   {
+    "pole_id": "P-HOMES-A",
+    "facility_label": "Residential area A",
+    "tier": 3,
+    "customers_restored": 60,
+    "report_count": 22,
+    "eta_seconds": 300
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 35,
+    "report_count": 9
+   },
+   {
+    "pole_id": "P-APT",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "customers_restored": 18,
+    "report_count": 4,
+    "eta_seconds": 780
+   },
+   {
+    "pole_id": "T-HALL",
+    "equipment": "transformer",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "customers_restored": 10,
+    "report_count": 3,
+    "eta_seconds": 480
+   },
+   {
+    "pole_id": "P-HS",
+    "facility_label": "High school",
+    "tier": 2,
+    "safety": "unsafe",
+    "customers_restored": 22,
+    "report_count": 7
+   },
+   {
+    "pole_id": "T-HOMES-C",
+    "equipment": "transformer",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 42,
+    "report_count": 11,
+    "eta_seconds": 360
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 9,
+    "report_count": 2,
+    "eta_seconds": 660
+   }
+  ],
+  "case-02": [
+   {
+    "pole_id": "P-MARKET",
+    "facility_label": "Public market",
+    "tier": 2,
+    "customers_restored": 15,
+    "report_count": 7,
+    "eta_seconds": 660
+   },
+   {
+    "pole_id": "P-HALL",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "customers_restored": 6,
+    "report_count": 3,
+    "eta_seconds": 480
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "customers_restored": 45,
+    "report_count": 12,
+    "eta_seconds": 360
+   },
+   {
+    "pole_id": "P-APT",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "customers_restored": 30,
+    "report_count": 5,
+    "eta_seconds": 540
+   },
+   {
+    "pole_id": "T-SCHOOL",
+    "equipment": "transformer",
+    "facility_label": "School",
+    "tier": 2,
+    "customers_restored": 11,
+    "report_count": 4,
+    "eta_seconds": 420
+   },
+   {
+    "pole_id": "T-HOMES-C",
+    "equipment": "transformer",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 38,
+    "report_count": 9,
+    "eta_seconds": 300
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 12,
+    "report_count": 3,
+    "eta_seconds": 720
+   },
+   {
+    "pole_id": "P-HOMES-E",
+    "facility_label": "Residential area E",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 26,
+    "report_count": 8
+   }
+  ],
+  "case-03": [
+   {
+    "pole_id": "P-SCHOOL",
+    "facility_label": "School",
+    "tier": 2,
+    "customers_restored": 18,
+    "report_count": 6,
+    "eta_seconds": 420
+   },
+   {
+    "pole_id": "P-MARKET",
+    "facility_label": "Public market",
+    "tier": 2,
+    "customers_restored": 12,
+    "report_count": 4,
+    "eta_seconds": 600
+   },
+   {
+    "pole_id": "P-HOMES-A",
+    "facility_label": "Residential area A",
+    "tier": 3,
+    "customers_restored": 55,
+    "report_count": 20,
+    "eta_seconds": 300
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "customers_restored": 24,
+    "report_count": 8,
+    "eta_seconds": 720
+   },
+   {
+    "pole_id": "P-APT",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 16,
+    "report_count": 3
+   },
+   {
+    "pole_id": "T-HALL",
+    "equipment": "transformer",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "customers_restored": 9,
+    "report_count": 3,
+    "eta_seconds": 540
+   },
+   {
+    "pole_id": "T-HOMES-C",
+    "equipment": "transformer",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 33,
+    "report_count": 10,
+    "eta_seconds": 480
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 7,
+    "report_count": 2,
+    "eta_seconds": 840
+   },
+   {
+    "pole_id": "T-HOMES-E",
+    "equipment": "transformer",
+    "facility_label": "Residential area E",
+    "tier": 3,
+    "customers_restored": 28,
+    "report_count": 9,
+    "eta_seconds": 600,
+    "flood_status": "flooded_hold",
+    "scope_note": "Street still flooded. Restoration awaits clearance."
+   }
+  ],
+  "case-04": [
+   {
+    "pole_id": "P-HOSP",
+    "facility_label": "Hospital",
+    "tier": 1,
+    "status": "completed",
+    "customers_restored": 41,
+    "report_count": 6
+   },
+   {
+    "pole_id": "P-MARKET",
+    "facility_label": "Public market",
+    "tier": 2,
+    "customers_restored": 12,
+    "report_count": 15,
+    "eta_seconds": 300
+   },
+   {
+    "pole_id": "P-HOMES-A",
+    "facility_label": "Residential area A",
+    "tier": 3,
+    "customers_restored": 70,
+    "report_count": 25,
+    "eta_seconds": 240
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "customers_restored": 30,
+    "report_count": 10,
+    "eta_seconds": 480
+   },
+   {
+    "pole_id": "P-APT",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 20,
+    "report_count": 5
+   },
+   {
+    "pole_id": "P-EVAC",
+    "facility_label": "Evacuation center",
+    "tier": 1,
+    "status": "completed",
+    "customers_restored": 11,
+    "report_count": 3
+   },
+   {
+    "pole_id": "T-HS",
+    "equipment": "transformer",
+    "facility_label": "High school",
+    "tier": 2,
+    "customers_restored": 16,
+    "report_count": 6,
+    "eta_seconds": 540
+   },
+   {
+    "pole_id": "T-HOMES-C",
+    "equipment": "transformer",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 44,
+    "report_count": 13,
+    "eta_seconds": 360
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 10,
+    "report_count": 3,
+    "eta_seconds": 600
+   }
+  ],
+  "case-05": [
+   {
+    "pole_id": "P-SCHOOL",
+    "facility_label": "School",
+    "tier": 2,
+    "customers_restored": 15,
+    "report_count": 6,
+    "eta_seconds": 600,
+    "distance_meters": 2500
+   },
+   {
+    "pole_id": "P-HALL",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "customers_restored": 8,
+    "report_count": 2,
+    "eta_seconds": 420,
+    "distance_meters": 1200
+   },
+   {
+    "pole_id": "P-HOMES-A",
+    "facility_label": "Residential area A",
+    "tier": 3,
+    "customers_restored": 50,
+    "report_count": 14,
+    "eta_seconds": 300,
+    "distance_meters": 800
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "customers_restored": 25,
+    "report_count": 9,
+    "eta_seconds": 900,
+    "distance_meters": 3000
+   },
+   {
+    "pole_id": "T-MARKET",
+    "equipment": "transformer",
+    "facility_label": "Public market",
+    "tier": 2,
+    "customers_restored": 12,
+    "report_count": 5,
+    "eta_seconds": 540,
+    "distance_meters": 1800
+   },
+   {
+    "pole_id": "T-HOMES-C",
+    "equipment": "transformer",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 36,
+    "report_count": 10,
+    "eta_seconds": 480,
+    "distance_meters": 1500
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 8,
+    "report_count": 2,
+    "eta_seconds": 720,
+    "distance_meters": 2800
+   },
+   {
+    "pole_id": "P-APT",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 18,
+    "report_count": 6
+   }
+  ],
+  "case-06": [
+   {
+    "pole_id": "P-MARKET",
+    "facility_label": "Public market",
+    "tier": 2,
+    "safety": "unsafe",
+    "customers_restored": 30,
+    "report_count": 11
+   },
+   {
+    "pole_id": "P-HALL",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "customers_restored": 4,
+    "report_count": 5,
+    "eta_seconds": 300
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "customers_restored": 40,
+    "report_count": 12,
+    "eta_seconds": 420
+   },
+   {
+    "pole_id": "P-HS",
+    "facility_label": "High school",
+    "tier": 2,
+    "safety": "unsafe",
+    "customers_restored": 25,
+    "report_count": 8
+   },
+   {
+    "pole_id": "T-HOMES-C",
+    "equipment": "transformer",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 28,
+    "report_count": 9,
+    "eta_seconds": 360
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 11,
+    "report_count": 3,
+    "eta_seconds": 540
+   },
+   {
+    "pole_id": "T-APT",
+    "equipment": "transformer",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "customers_restored": 15,
+    "report_count": 4,
+    "eta_seconds": 660
+   }
+  ],
+  "case-07": [
+   {
+    "pole_id": "P-EVAC",
+    "facility_label": "Evacuation center",
+    "tier": 1,
+    "status": "completed",
+    "customers_restored": 11,
+    "report_count": 3
+   },
+   {
+    "pole_id": "P-HALL",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "safety": "unsafe",
+    "customers_restored": 20,
+    "report_count": 9
+   },
+   {
+    "pole_id": "P-HOMES-C",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 30,
+    "report_count": 8
+   },
+   {
+    "pole_id": "P-MARKET",
+    "facility_label": "Public market",
+    "tier": 2,
+    "safety": "unsafe",
+    "customers_restored": 15,
+    "report_count": 6
+   },
+   {
+    "pole_id": "T-APT",
+    "equipment": "transformer",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "customers_restored": 4,
+    "report_count": 2,
+    "eta_seconds": 420
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 3,
+    "report_count": 1,
+    "eta_seconds": 540
+   },
+   {
+    "pole_id": "T-HOMES-E",
+    "equipment": "transformer",
+    "facility_label": "Residential area E",
+    "tier": 3,
+    "customers_restored": 18,
+    "report_count": 5,
+    "eta_seconds": 480,
+    "flood_status": "flooded_hold",
+    "scope_note": "Street still flooded. Restoration awaits clearance."
+   }
+  ],
+  "case-08": [
+   {
+    "pole_id": "P-EVAC",
+    "facility_label": "Evacuation center",
+    "tier": 1,
+    "safety": "unsafe",
+    "customers_restored": 11,
+    "report_count": 3
+   },
+   {
+    "pole_id": "P-HALL",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "safety": "unsafe",
+    "customers_restored": 9,
+    "report_count": 5
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 28,
+    "report_count": 7
+   },
+   {
+    "pole_id": "T-MARKET",
+    "equipment": "transformer",
+    "facility_label": "Public market",
+    "tier": 2,
+    "safety": "unsafe",
+    "customers_restored": 14,
+    "report_count": 6
+   },
+   {
+    "pole_id": "L-HOMES-C",
+    "equipment": "line",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 19,
+    "report_count": 5
+   },
+   {
+    "pole_id": "T-APT",
+    "equipment": "transformer",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 10,
+    "report_count": 3
+   },
+   {
+    "pole_id": "P-HOMES-D",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "status": "completed",
+    "customers_restored": 16,
+    "report_count": 4
+   }
+  ],
+  "case-09": [
+   {
+    "pole_id": "P-MARKET",
+    "facility_label": "Public market",
+    "tier": 2,
+    "customers_restored": 14,
+    "report_count": 6,
+    "eta_seconds": 600
+   },
+   {
+    "pole_id": "P-HALL",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "customers_restored": 10,
+    "report_count": 4,
+    "eta_seconds": 480
+   },
+   {
+    "pole_id": "P-HOMES-A",
+    "facility_label": "Residential area A",
+    "tier": 3,
+    "customers_restored": 65,
+    "report_count": 18,
+    "eta_seconds": 300
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "customers_restored": 20,
+    "report_count": 5,
+    "eta_seconds": 540
+   },
+   {
+    "pole_id": "T-HS",
+    "equipment": "transformer",
+    "facility_label": "High school",
+    "tier": 2,
+    "customers_restored": 8,
+    "report_count": 2,
+    "eta_seconds": 720
+   },
+   {
+    "pole_id": "T-HOMES-C",
+    "equipment": "transformer",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 34,
+    "report_count": 9,
+    "eta_seconds": 420
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 6,
+    "report_count": 2,
+    "eta_seconds": 660
+   },
+   {
+    "pole_id": "P-APT",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 24,
+    "report_count": 7
+   }
+  ],
+  "case-10": [
+   {
+    "pole_id": "P-SCHOOL",
+    "facility_label": "School",
+    "tier": 2,
+    "customers_restored": 16,
+    "report_count": 5,
+    "eta_seconds": 540
+   },
+   {
+    "pole_id": "P-HALL",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "customers_restored": 7,
+    "report_count": 2,
+    "eta_seconds": 300
+   },
+   {
+    "pole_id": "P-HOMES-A",
+    "facility_label": "Residential area A",
+    "tier": 3,
+    "customers_restored": 48,
+    "report_count": 15,
+    "eta_seconds": 360
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "customers_restored": 30,
+    "report_count": 10,
+    "eta_seconds": 480,
+    "flood_status": "flooded_hold",
+    "scope_note": "Street still flooded. Restoration awaits clearance."
+   },
+   {
+    "pole_id": "T-MARKET",
+    "equipment": "transformer",
+    "facility_label": "Public market",
+    "tier": 2,
+    "customers_restored": 13,
+    "report_count": 4,
+    "eta_seconds": 480
+   },
+   {
+    "pole_id": "T-HOMES-C",
+    "equipment": "transformer",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 31,
+    "report_count": 8,
+    "eta_seconds": 420
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 9,
+    "report_count": 3,
+    "eta_seconds": 600
+   },
+   {
+    "pole_id": "P-APT",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 17,
+    "report_count": 5
+   }
+  ],
+  "case-11": [
+   {
+    "pole_id": "P-MARKET",
+    "facility_label": "Public market",
+    "tier": 2,
+    "customers_restored": 18,
+    "report_count": 7,
+    "eta_seconds": 420
+   },
+   {
+    "pole_id": "P-SCHOOL",
+    "facility_label": "School",
+    "tier": 2,
+    "customers_restored": 9,
+    "report_count": 3,
+    "eta_seconds": 660
+   },
+   {
+    "pole_id": "P-HOMES-A",
+    "facility_label": "Residential area A",
+    "tier": 3,
+    "customers_restored": 52,
+    "report_count": 16,
+    "eta_seconds": 300
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "customers_restored": 26,
+    "report_count": 8,
+    "eta_seconds": 540,
+    "flood_status": "flooded_hold",
+    "scope_note": "Low-lying street still flooded. Restoration awaits clearance."
+   },
+   {
+    "pole_id": "T-HALL",
+    "equipment": "transformer",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "customers_restored": 6,
+    "report_count": 2,
+    "eta_seconds": 540
+   },
+   {
+    "pole_id": "T-HOMES-C",
+    "equipment": "transformer",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 29,
+    "report_count": 9,
+    "eta_seconds": 420
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 11,
+    "report_count": 3,
+    "eta_seconds": 780
+   },
+   {
+    "pole_id": "P-APT",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 21,
+    "report_count": 6
+   }
+  ],
+  "case-12": [
+   {
+    "pole_id": "P-HALL",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "customers_restored": 12,
+    "report_count": 4,
+    "eta_seconds": 480
+   },
+   {
+    "pole_id": "P-SCHOOL",
+    "facility_label": "School",
+    "tier": 2,
+    "safety": "unsafe",
+    "customers_restored": 20,
+    "report_count": 6
+   },
+   {
+    "pole_id": "P-HOMES-A",
+    "facility_label": "Residential area A",
+    "tier": 3,
+    "customers_restored": 44,
+    "report_count": 13,
+    "eta_seconds": 360
+   },
+   {
+    "pole_id": "P-APT",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "customers_restored": 20,
+    "report_count": 5,
+    "eta_seconds": 600
+   },
+   {
+    "pole_id": "T-MARKET",
+    "equipment": "transformer",
+    "facility_label": "Public market",
+    "tier": 2,
+    "customers_restored": 17,
+    "report_count": 6,
+    "eta_seconds": 420
+   },
+   {
+    "pole_id": "T-HOMES-B",
+    "equipment": "transformer",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "customers_restored": 27,
+    "report_count": 8,
+    "eta_seconds": 480
+   },
+   {
+    "pole_id": "L-HOMES-C",
+    "equipment": "line",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 8,
+    "report_count": 2,
+    "eta_seconds": 720
+   },
+   {
+    "pole_id": "P-HOMES-D",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 23,
+    "report_count": 7,
+    "eta_seconds": 540,
+    "flood_status": "flooded_hold",
+    "scope_note": "Street still flooded. Restoration awaits clearance."
+   }
+  ],
+  "case-13": [
+   {
+    "pole_id": "P-EVAC",
+    "facility_label": "Evacuation center",
+    "tier": 1,
+    "safety": "unsafe",
+    "customers_restored": 11,
+    "report_count": 4
+   },
+   {
+    "pole_id": "P-MARKET",
+    "facility_label": "Public market",
+    "tier": 2,
+    "customers_restored": 18,
+    "report_count": 6,
+    "eta_seconds": 480
+   },
+   {
+    "pole_id": "P-HALL",
+    "facility_label": "Barangay hall",
+    "tier": 2,
+    "customers_restored": 8,
+    "report_count": 2,
+    "eta_seconds": 720
+   },
+   {
+    "pole_id": "P-HOMES-A",
+    "facility_label": "Residential area A",
+    "tier": 3,
+    "customers_restored": 36,
+    "report_count": 11,
+    "eta_seconds": 300
+   },
+   {
+    "pole_id": "P-HOMES-B",
+    "facility_label": "Residential area B",
+    "tier": 3,
+    "customers_restored": 22,
+    "report_count": 9,
+    "eta_seconds": 420,
+    "flood_status": "flooded_hold",
+    "scope_note": "Street still flooded. Restoration awaits clearance."
+   },
+   {
+    "pole_id": "T-SCHOOL",
+    "equipment": "transformer",
+    "facility_label": "School",
+    "tier": 2,
+    "customers_restored": 12,
+    "report_count": 4,
+    "eta_seconds": 600
+   },
+   {
+    "pole_id": "T-HOMES-C",
+    "equipment": "transformer",
+    "facility_label": "Residential area C",
+    "tier": 3,
+    "customers_restored": 30,
+    "report_count": 8,
+    "eta_seconds": 360
+   },
+   {
+    "pole_id": "L-HOMES-D",
+    "equipment": "line",
+    "facility_label": "Residential area D",
+    "tier": 3,
+    "customers_restored": 7,
+    "report_count": 2,
+    "eta_seconds": 660
+   },
+   {
+    "pole_id": "P-APT",
+    "facility_label": "Apartment block",
+    "tier": 3,
+    "safety": "unsafe",
+    "customers_restored": 19,
+    "report_count": 5
+   }
+  ]
+ },
+ "titles": {
+  "case-01": "Hospital and evacuation center out: the hospital pole is not safe to reach",
+  "case-02": "Hospital and a large residential area out: both can be reached",
+  "case-03": "Hospital and evacuation center out: the hospital line feeds more customers",
+  "case-04": "School and barangay hall out, with the same number of customers",
+  "case-05": "Hospital and evacuation center out: the nearer one takes longer to reach",
+  "case-06": "Hospital and evacuation center cannot be reached: a school and homes can",
+  "case-07": "Critical sites already restored: residential streets still out",
+  "case-08": "Every site is unsafe to reach",
+  "case-09": "Two schools out: one is sheltering evacuees",
+  "case-10": "Flooded hospital: its upper floors are cleared for power",
+  "case-11": "Flooded hospital: no clearance to restore it yet",
+  "case-12": "Hospital cleared for power, but the road to its pole is unsafe",
+  "case-13": "Flooded hospital: only a pole inspection can be done",
+  "case-14": "Two hospitals out: one is only partly cleared of flood",
+  "case-15": "Hospital and evacuation center flooded: a market and a school can be worked on",
+  "case-16": "Evacuation center out, and a flooded hospital that needs an inspection",
+  "case-17": "Flood and unsafe roads: nothing can be worked on yet",
+  "case-18": "Only homes left: an apartment tower and several streets",
+  "case-19": "Market and barangay hall out: same customers, same reports",
+  "case-20": "One shelter restored: a hospital's upper floors and a second shelter waiting"
+ },
+ "cases": [
+  {
+   "case_id": "case-14",
+   "title": "More customers between two hospitals",
+   "setup": "Two hospitals are without power. The general hospital pole is safe and also feeds 30 homes. The multi-floor hospital is flooded on its lower floors; authorized personnel have cleared floors 3 to 6 for separate restoration and its pole is safe. The evacuation center pole is unsafe.",
+   "expected_action": "DISPATCH",
+   "expected_pole_id": "P-HOSP-GEN",
+   "expected_reason": "Both hospital jobs are safe Critical jobs. The general hospital job restores more customers, so the truck goes there first; the partly cleared hospital is second.",
+   "place": {
+    "label": "Sampaloc, Manila",
+    "barangay": "Sampaloc",
+    "city": "Manila",
+    "lat": 14.61,
+    "lon": 120.996
+   },
+   "poles": [
+    {
+     "pole_id": "P-HOSP-GEN",
+     "facility_label": "General hospital and 30 homes",
+     "tier": 1,
+     "customers_restored": 31,
+     "report_count": 9,
+     "eta_seconds": 660
+    },
+    {
+     "pole_id": "P-HOSP-MF",
+     "facility_label": "Multi-floor hospital",
+     "tier": 1,
+     "customers_restored": 1,
+     "report_count": 6,
+     "eta_seconds": 420,
+     "flood_status": "flooded_partial_cleared",
+     "scope_note": "Floors 3 to 6 cleared for separate restoration. Lower floors held."
+    },
+    {
+     "pole_id": "P-EVAC",
+     "facility_label": "Evacuation center",
+     "tier": 1,
+     "customers_restored": 14,
+     "report_count": 5,
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "T-MARKET",
+     "facility_label": "Public market",
+     "tier": 2,
+     "customers_restored": 22,
+     "report_count": 8,
+     "eta_seconds": 480,
+     "equipment": "transformer"
+    },
+    {
+     "pole_id": "P-SCHOOL",
+     "facility_label": "Elementary school",
+     "tier": 2,
+     "customers_restored": 12,
+     "report_count": 4,
+     "eta_seconds": 540
+    },
+    {
+     "pole_id": "T-HALL",
+     "facility_label": "Barangay hall",
+     "tier": 2,
+     "customers_restored": 7,
+     "report_count": 2,
+     "eta_seconds": 360,
+     "equipment": "transformer"
+    },
+    {
+     "pole_id": "P-HOMES-A",
+     "facility_label": "Residential area A",
+     "tier": 3,
+     "customers_restored": 75,
+     "report_count": 24,
+     "eta_seconds": 300
+    },
+    {
+     "pole_id": "T-HOMES-B",
+     "facility_label": "Residential area B",
+     "tier": 3,
+     "customers_restored": 40,
+     "report_count": 11,
+     "eta_seconds": 420,
+     "equipment": "transformer"
+    },
+    {
+     "pole_id": "L-HOMES-C",
+     "facility_label": "Residential area C",
+     "tier": 3,
+     "customers_restored": 28,
+     "report_count": 9,
+     "eta_seconds": 600,
+     "equipment": "line",
+     "flood_status": "flooded_hold",
+     "scope_note": "Street still flooded. Restoration awaits clearance."
+    },
+    {
+     "pole_id": "P-APT",
+     "facility_label": "Apartment block",
+     "tier": 3,
+     "customers_restored": 20,
+     "report_count": 5,
+     "eta_seconds": 720
+    }
+   ]
+  },
+  {
+   "case_id": "case-15",
+   "title": "Flood holds every Critical job",
+   "setup": "The hospital and the evacuation center are flooded and neither has clearance for restoration. The public market and the high school poles are safe and clear of flood. The market serves more customers; the school is closer.",
+   "expected_action": "DISPATCH",
+   "expected_pole_id": "P-MARKET",
+   "expected_reason": "Both Critical jobs are on flood hold, so no Critical job can be done. Among the safe Community services jobs the public market restores the most customers.",
+   "place": {
+    "label": "Tondo, Manila",
+    "barangay": "Tondo",
+    "city": "Manila",
+    "lat": 14.619,
+    "lon": 120.967
+   },
+   "poles": [
+    {
+     "pole_id": "P-HOSP",
+     "facility_label": "Flooded hospital",
+     "tier": 1,
+     "customers_restored": 18,
+     "report_count": 14,
+     "eta_seconds": 480,
+     "flood_status": "flooded_hold",
+     "scope_note": "Restoration awaits clearance."
+    },
+    {
+     "pole_id": "P-EVAC",
+     "facility_label": "Flooded evacuation center",
+     "tier": 1,
+     "customers_restored": 9,
+     "report_count": 7,
+     "eta_seconds": 540,
+     "flood_status": "flooded_hold",
+     "scope_note": "Restoration awaits clearance."
+    },
+    {
+     "pole_id": "P-MARKET",
+     "facility_label": "Public market",
+     "tier": 2,
+     "customers_restored": 30,
+     "report_count": 12,
+     "eta_seconds": 600
+    },
+    {
+     "pole_id": "P-SCHOOL",
+     "facility_label": "High school",
+     "tier": 2,
+     "customers_restored": 18,
+     "report_count": 6,
+     "eta_seconds": 300
+    },
+    {
+     "pole_id": "T-HALL",
+     "facility_label": "Barangay hall",
+     "tier": 2,
+     "customers_restored": 10,
+     "report_count": 4,
+     "equipment": "transformer",
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "P-HOMES-A",
+     "facility_label": "Residential area A",
+     "tier": 3,
+     "customers_restored": 90,
+     "report_count": 31,
+     "eta_seconds": 240
+    },
+    {
+     "pole_id": "T-HOMES-B",
+     "facility_label": "Residential area B",
+     "tier": 3,
+     "customers_restored": 55,
+     "report_count": 16,
+     "eta_seconds": 360,
+     "equipment": "transformer"
+    },
+    {
+     "pole_id": "L-HOMES-C",
+     "facility_label": "Residential area C",
+     "tier": 3,
+     "customers_restored": 35,
+     "report_count": 12,
+     "eta_seconds": 420,
+     "equipment": "line",
+     "flood_status": "flooded_hold",
+     "scope_note": "Street still flooded. Restoration awaits clearance."
+    },
+    {
+     "pole_id": "P-APT",
+     "facility_label": "Apartment block",
+     "tier": 3,
+     "customers_restored": 26,
+     "report_count": 7,
+     "eta_seconds": 660
+    },
+    {
+     "pole_id": "T-HOMES-D",
+     "facility_label": "Residential area D",
+     "tier": 3,
+     "customers_restored": 12,
+     "report_count": 3,
+     "eta_seconds": 780,
+     "equipment": "transformer"
+    }
+   ]
+  },
+  {
+   "case_id": "case-16",
+   "title": "Restoration before inspection",
+   "setup": "The flooded hospital has a cleared pole inspection that can be done safely, but its restoration is on hold. The evacuation center pole is safe and ready for restoration. The hospital has more reports and is closer.",
+   "expected_action": "DISPATCH",
+   "expected_pole_id": "P-EVAC",
+   "expected_reason": "Both are safe Critical jobs that can be done now. The evacuation center job restores 12 customers; the hospital job is an inspection that restores none, so it comes second.",
+   "place": {
+    "label": "Brgy. Poblacion, Makati",
+    "barangay": "Poblacion",
+    "city": "Makati",
+    "lat": 14.564,
+    "lon": 121.031
+   },
+   "poles": [
+    {
+     "pole_id": "P-HOSP",
+     "facility_label": "Flooded multi-floor hospital",
+     "tier": 1,
+     "customers_restored": 0,
+     "report_count": 8,
+     "eta_seconds": 300,
+     "work_type": "inspect",
+     "flood_status": "flooded_hold",
+     "scope_note": "Pole inspection only. Restoration awaits clearance."
+    },
+    {
+     "pole_id": "P-EVAC",
+     "facility_label": "Evacuation center",
+     "tier": 1,
+     "customers_restored": 12,
+     "report_count": 4,
+     "eta_seconds": 720
+    },
+    {
+     "pole_id": "P-SHELTER",
+     "facility_label": "School serving as an evacuation center",
+     "tier": 1,
+     "customers_restored": 6,
+     "report_count": 3,
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "P-MARKET",
+     "facility_label": "Public market",
+     "tier": 2,
+     "customers_restored": 20,
+     "report_count": 9,
+     "eta_seconds": 420
+    },
+    {
+     "pole_id": "T-HALL",
+     "facility_label": "Barangay hall",
+     "tier": 2,
+     "customers_restored": 8,
+     "report_count": 3,
+     "eta_seconds": 480,
+     "equipment": "transformer"
+    },
+    {
+     "pole_id": "P-HOMES-A",
+     "facility_label": "Residential area A",
+     "tier": 3,
+     "customers_restored": 66,
+     "report_count": 19,
+     "eta_seconds": 360
+    },
+    {
+     "pole_id": "T-HOMES-B",
+     "facility_label": "Residential area B",
+     "tier": 3,
+     "customers_restored": 38,
+     "report_count": 10,
+     "eta_seconds": 540,
+     "equipment": "transformer"
+    },
+    {
+     "pole_id": "L-HOMES-C",
+     "facility_label": "Residential area C",
+     "tier": 3,
+     "customers_restored": 14,
+     "report_count": 4,
+     "eta_seconds": 660,
+     "equipment": "line"
+    },
+    {
+     "pole_id": "P-APT",
+     "facility_label": "Apartment block",
+     "tier": 3,
+     "customers_restored": 24,
+     "report_count": 8,
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "T-APT-B",
+     "facility_label": "Apartment block B",
+     "tier": 3,
+     "customers_restored": 9,
+     "report_count": 2,
+     "eta_seconds": 840,
+     "equipment": "transformer"
+    }
+   ]
+  },
+  {
+   "case_id": "case-17",
+   "title": "Flood and safety hold everything",
+   "setup": "Floodwater and unsafe roads cover the area. Every pending job is either unsafe for the crew or flooded with no clearance, and no inspection has been cleared.",
+   "expected_action": "HOLD",
+   "expected_pole_id": null,
+   "expected_reason": "Every pending job is either unsafe or on flood hold with no cleared inspection, so the truck holds until conditions change.",
+   "place": {
+    "label": "Brgy. Kapitolyo, Pasig",
+    "barangay": "Kapitolyo",
+    "city": "Pasig",
+    "lat": 14.573,
+    "lon": 121.059
+   },
+   "poles": [
+    {
+     "pole_id": "P-HOSP",
+     "facility_label": "Flooded hospital",
+     "tier": 1,
+     "customers_restored": 20,
+     "report_count": 11,
+     "eta_seconds": 420,
+     "flood_status": "flooded_hold",
+     "scope_note": "Restoration awaits clearance."
+    },
+    {
+     "pole_id": "P-EVAC",
+     "facility_label": "Evacuation center",
+     "tier": 1,
+     "customers_restored": 13,
+     "report_count": 6,
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "P-SCHOOL",
+     "facility_label": "School",
+     "tier": 2,
+     "customers_restored": 16,
+     "report_count": 5,
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "T-MARKET",
+     "facility_label": "Public market",
+     "tier": 2,
+     "customers_restored": 24,
+     "report_count": 9,
+     "eta_seconds": 480,
+     "equipment": "transformer",
+     "flood_status": "flooded_hold",
+     "scope_note": "Street still flooded. Restoration awaits clearance."
+    },
+    {
+     "pole_id": "T-HALL",
+     "facility_label": "Barangay hall",
+     "tier": 2,
+     "customers_restored": 6,
+     "report_count": 2,
+     "equipment": "transformer",
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "P-HOMES-A",
+     "facility_label": "Residential area A",
+     "tier": 3,
+     "customers_restored": 80,
+     "report_count": 27,
+     "eta_seconds": 300,
+     "flood_status": "flooded_hold",
+     "scope_note": "Street still flooded. Restoration awaits clearance."
+    },
+    {
+     "pole_id": "T-HOMES-B",
+     "facility_label": "Residential area B",
+     "tier": 3,
+     "customers_restored": 42,
+     "report_count": 13,
+     "equipment": "transformer",
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "L-HOMES-C",
+     "facility_label": "Residential area C",
+     "tier": 3,
+     "customers_restored": 18,
+     "report_count": 6,
+     "equipment": "line",
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "P-APT",
+     "facility_label": "Apartment block",
+     "tier": 3,
+     "customers_restored": 30,
+     "report_count": 9,
+     "eta_seconds": 540,
+     "flood_status": "flooded_hold",
+     "scope_note": "Street still flooded. Restoration awaits clearance."
+    },
+    {
+     "pole_id": "P-HOMES-D",
+     "facility_label": "Residential area D",
+     "tier": 3,
+     "customers_restored": 15,
+     "report_count": 4,
+     "status": "completed"
+    }
+   ]
+  },
+  {
+   "case_id": "case-18",
+   "title": "Residential only: most customers first",
+   "setup": "Critical and community service work is completed. Only residential jobs remain. The apartment tower serves 140 customers and has a 13-minute ETA. Residential area A serves 60 customers, has more reports and has a 4-minute ETA.",
+   "expected_action": "DISPATCH",
+   "expected_pole_id": "P-APT",
+   "expected_reason": "No Critical or Community services job is pending. Among the safe residential jobs the apartment tower restores the most customers, although Residential area A has more reports and is closer.",
+   "place": {
+    "label": "Brgy. Concepcion Uno, Marikina",
+    "barangay": "Concepcion Uno",
+    "city": "Marikina",
+    "lat": 14.651,
+    "lon": 121.103
+   },
+   "poles": [
+    {
+     "pole_id": "P-HOSP",
+     "facility_label": "Hospital",
+     "tier": 1,
+     "customers_restored": 35,
+     "report_count": 8,
+     "status": "completed"
+    },
+    {
+     "pole_id": "P-EVAC",
+     "facility_label": "Evacuation center",
+     "tier": 1,
+     "customers_restored": 10,
+     "report_count": 3,
+     "status": "completed"
+    },
+    {
+     "pole_id": "P-SCHOOL",
+     "facility_label": "School",
+     "tier": 2,
+     "customers_restored": 15,
+     "report_count": 5,
+     "status": "completed"
+    },
+    {
+     "pole_id": "P-APT",
+     "facility_label": "Apartment tower",
+     "tier": 3,
+     "customers_restored": 140,
+     "report_count": 22,
+     "eta_seconds": 780
+    },
+    {
+     "pole_id": "P-HOMES-A",
+     "facility_label": "Residential area A",
+     "tier": 3,
+     "customers_restored": 60,
+     "report_count": 35,
+     "eta_seconds": 240
+    },
+    {
+     "pole_id": "T-HOMES-B",
+     "facility_label": "Residential area B",
+     "tier": 3,
+     "customers_restored": 35,
+     "report_count": 12,
+     "eta_seconds": 300,
+     "equipment": "transformer"
+    },
+    {
+     "pole_id": "L-HOMES-C",
+     "facility_label": "Residential area C",
+     "tier": 3,
+     "customers_restored": 22,
+     "report_count": 6,
+     "eta_seconds": 420,
+     "equipment": "line"
+    },
+    {
+     "pole_id": "T-HOMES-D",
+     "facility_label": "Residential area D",
+     "tier": 3,
+     "customers_restored": 48,
+     "report_count": 15,
+     "equipment": "transformer",
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "P-HOMES-E",
+     "facility_label": "Residential area E",
+     "tier": 3,
+     "customers_restored": 30,
+     "report_count": 10,
+     "eta_seconds": 480,
+     "flood_status": "flooded_hold",
+     "scope_note": "Street still flooded. Restoration awaits clearance."
+    },
+    {
+     "pole_id": "T-APT-B",
+     "facility_label": "Apartment block B",
+     "tier": 3,
+     "customers_restored": 16,
+     "report_count": 4,
+     "eta_seconds": 600,
+     "equipment": "transformer"
+    }
+   ]
+  },
+  {
+   "case_id": "case-19",
+   "title": "Driving time decides between community services",
+   "setup": "The hospital pole is unsafe and the evacuation center is already restored. The public market and barangay hall jobs are safe and tie on customers restored and reports. The market is farther away but has a 5-minute ETA; the hall has an 11-minute ETA.",
+   "expected_action": "DISPATCH",
+   "expected_pole_id": "P-MARKET",
+   "expected_reason": "No Critical job can be done: the hospital pole is unsafe and the evacuation center is completed. The market and the barangay hall tie on customers and reports, so the shorter driving ETA decides.",
+   "place": {
+    "label": "Brgy. Western Bicutan, Taguig",
+    "barangay": "Western Bicutan",
+    "city": "Taguig",
+    "lat": 14.512,
+    "lon": 121.039
+   },
+   "poles": [
+    {
+     "pole_id": "P-MARKET",
+     "facility_label": "Public market",
+     "tier": 2,
+     "customers_restored": 15,
+     "report_count": 6,
+     "eta_seconds": 300,
+     "distance_meters": 1500
+    },
+    {
+     "pole_id": "P-HALL",
+     "facility_label": "Barangay hall",
+     "tier": 2,
+     "customers_restored": 15,
+     "report_count": 6,
+     "eta_seconds": 660,
+     "distance_meters": 900
+    },
+    {
+     "pole_id": "P-HOSP",
+     "facility_label": "Hospital",
+     "tier": 1,
+     "customers_restored": 28,
+     "report_count": 9,
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "P-EVAC",
+     "facility_label": "Evacuation center",
+     "tier": 1,
+     "customers_restored": 11,
+     "report_count": 3,
+     "status": "completed"
+    },
+    {
+     "pole_id": "T-SCHOOL",
+     "facility_label": "School",
+     "tier": 2,
+     "customers_restored": 9,
+     "report_count": 3,
+     "eta_seconds": 420,
+     "equipment": "transformer",
+     "distance_meters": 2000
+    },
+    {
+     "pole_id": "P-HOMES-A",
+     "facility_label": "Residential area A",
+     "tier": 3,
+     "customers_restored": 70,
+     "report_count": 20,
+     "eta_seconds": 240,
+     "distance_meters": 700
+    },
+    {
+     "pole_id": "T-HOMES-B",
+     "facility_label": "Residential area B",
+     "tier": 3,
+     "customers_restored": 33,
+     "report_count": 9,
+     "eta_seconds": 480,
+     "equipment": "transformer",
+     "distance_meters": 1800
+    },
+    {
+     "pole_id": "L-HOMES-C",
+     "facility_label": "Residential area C",
+     "tier": 3,
+     "customers_restored": 12,
+     "report_count": 3,
+     "eta_seconds": 600,
+     "equipment": "line",
+     "distance_meters": 2600
+    },
+    {
+     "pole_id": "P-APT",
+     "facility_label": "Apartment block",
+     "tier": 3,
+     "customers_restored": 25,
+     "report_count": 8,
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "T-HOMES-D",
+     "facility_label": "Residential area D",
+     "tier": 3,
+     "customers_restored": 19,
+     "report_count": 6,
+     "eta_seconds": 540,
+     "equipment": "transformer",
+     "distance_meters": 2200,
+     "flood_status": "flooded_hold",
+     "scope_note": "Street still flooded. Restoration awaits clearance."
+    }
+   ]
+  },
+  {
+   "case_id": "case-20",
+   "title": "Reports decide between two Critical jobs",
+   "setup": "The first evacuation center is already restored. The multi-floor hospital has clearance for its upper floors and its pole is safe. A school serving as an evacuation center is also safe. Each job serves one customer connection. The hospital has 4 reports and a 9-minute ETA; the school has 2 reports and a 6-minute ETA.",
+   "expected_action": "DISPATCH",
+   "expected_pole_id": "P-HOSP",
+   "expected_reason": "Both pending Critical jobs are safe and each restores one customer connection. The hospital has more linked reports, so it goes first even though the school is closer; only its cleared floors are restored.",
+   "place": {
+    "label": "Brgy. Bagong Barrio, Caloocan",
+    "barangay": "Bagong Barrio",
+    "city": "Caloocan",
+    "lat": 14.659,
+    "lon": 120.999
+   },
+   "poles": [
+    {
+     "pole_id": "P-EVAC",
+     "facility_label": "Evacuation center",
+     "tier": 1,
+     "customers_restored": 12,
+     "report_count": 4,
+     "status": "completed"
+    },
+    {
+     "pole_id": "P-HOSP",
+     "facility_label": "Multi-floor hospital",
+     "tier": 1,
+     "customers_restored": 1,
+     "report_count": 4,
+     "eta_seconds": 540,
+     "flood_status": "flooded_partial_cleared",
+     "scope_note": "Floors 2 to 5 cleared for separate restoration. Ground floor held."
+    },
+    {
+     "pole_id": "P-SHELTER",
+     "facility_label": "School serving as an evacuation center",
+     "tier": 1,
+     "customers_restored": 1,
+     "report_count": 2,
+     "eta_seconds": 360
+    },
+    {
+     "pole_id": "P-MARKET",
+     "facility_label": "Public market",
+     "tier": 2,
+     "customers_restored": 26,
+     "report_count": 10,
+     "eta_seconds": 420
+    },
+    {
+     "pole_id": "T-HS",
+     "facility_label": "High school",
+     "tier": 2,
+     "customers_restored": 17,
+     "report_count": 6,
+     "equipment": "transformer",
+     "safety": "unsafe"
+    },
+    {
+     "pole_id": "T-HALL",
+     "facility_label": "Barangay hall",
+     "tier": 2,
+     "customers_restored": 9,
+     "report_count": 3,
+     "eta_seconds": 480,
+     "equipment": "transformer"
+    },
+    {
+     "pole_id": "P-HOMES-A",
+     "facility_label": "Residential area A",
+     "tier": 3,
+     "customers_restored": 58,
+     "report_count": 17,
+     "eta_seconds": 300
+    },
+    {
+     "pole_id": "T-HOMES-B",
+     "facility_label": "Residential area B",
+     "tier": 3,
+     "customers_restored": 31,
+     "report_count": 9,
+     "eta_seconds": 540,
+     "equipment": "transformer"
+    },
+    {
+     "pole_id": "L-HOMES-C",
+     "facility_label": "Residential area C",
+     "tier": 3,
+     "customers_restored": 10,
+     "report_count": 3,
+     "eta_seconds": 720,
+     "equipment": "line"
+    },
+    {
+     "pole_id": "P-APT",
+     "facility_label": "Apartment block",
+     "tier": 3,
+     "customers_restored": 22,
+     "report_count": 7,
+     "eta_seconds": 600,
+     "flood_status": "flooded_hold",
+     "scope_note": "Street still flooded. Restoration awaits clearance."
+    }
+   ]
   }
+ ]
 }

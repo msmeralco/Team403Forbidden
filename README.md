@@ -6,7 +6,7 @@ After a typhoon, a utility has many power interruptions at once and too few crew
 
 FirstLook recommends. People decide, and Meralco's crews do the work.
 
-All data is simulated: an invented power network laid over real places in Greater Manila, and 13 hand-made interruption cases. Nothing here is Meralco's own data.
+All data is simulated: an invented power network laid over real places in Greater Manila, and 20 hand-made interruption cases (13 supplied by the team, 7 added for this build). Nothing here is Meralco's own data.
 
 ## What you see
 
@@ -18,9 +18,21 @@ All data is simulated: an invented power network laid over real places in Greate
    - **On hold** carries a pause mark and the reason (not safe for the crew yet, or flooded and waiting for clearance). When everything is on hold, the answer is *Hold the crew*.
    - **The crew's road route** from the office to number 1 is drawn in blue. Click another number, on the map or in the panel, to see the route to it instead. Only one route is drawn at a time.
    - **Resolve** on number 1 marks it done: it moves to *Done*, number 2 becomes the new number 1, the route moves with it, and the count of customers without power drops. *Undo* puts it back. This walks down the order Liwa already gave; it does not ask her again.
+   - **When conditions change, Liwa ranks again.** Anything on hold has a button for what has changed (*Now safe for the crew*, *Flood cleared*), and number 1 has *Not safe after all*. Pressing one records the change and Liwa ranks the interruption as it now stands, in 6 to 10 seconds. A panel then says what changed and what moved (for example: Pole at Flooded hospital, on hold to number 1), with her new reason. *Put this interruption back as it was* undoes every change.
    - **Customer reports** (the second pill) lists the reports by channel (Meralco App, SMS, Hotline 16211, Facebook, X), with what Liwa took from them on top. Open a channel to list its reports, hazards and people who depend on power first; open a report to see it the way that channel shows it (a Facebook post or comment, an X post, a text message, a hotline call ticket, a Meralco App report) and how it counts.
    - *How Liwa decided*, folded at the bottom, has the records she used, the comparison with the test file's expected answer, and *Ask Liwa again*.
-4. **Liwa.** She ranks an interruption live, at the moment it is opened (about 6 to 10 seconds), and keeps the answer until the server restarts or the case changes. Click the character for the hierarchy she ranks by. *Test me on all 13* ranks every interruption afresh and reports how many answers match the test file. There is nothing to type.
+4. **Liwa.** She ranks an interruption live, at the moment it is opened (about 6 to 10 seconds), and again whenever its conditions change. An answer is kept for as long as the server runs, so the same situation is never ranked twice. Click the character for the hierarchy she ranks by. *Test me on all 20* ranks every interruption afresh and reports how many answers match. There is nothing to type.
+
+### History and reports
+
+The menu has two more entries under *Replay the typhoon*. Both open the **Typhoon records** page.
+
+- **History.** Past typhoons on a time line, newest first, with the one in progress at the top. For each: what happened, four figures (customers affected, interruptions, time to restore 90%, time until everyone was back), and the **restoration curve**: the share of customers with power back, by hours after the all clear. *More about ...* adds the causes of damage, who was affected by customer tier, the customer reports, the holds, and what was changed afterwards.
+- **Reports.** One PDF per typhoon, exported as a file: a **restoration report** for each past typhoon and a **situation report** for the one in progress.
+
+A restoration report (`backend/app/report_pdf.py`) has what such a report needs in practice: document number, status, period and area covered; the event; impact at a glance, including customer-minutes interrupted; the restoration curve and its milestones; impact by customer tier; causes of damage and the work done; customer reports by channel; safety and holds; how the work was prioritised and where a dispatcher changed it; crews; the full interruption log with times; open items and follow-up actions; definitions and limits of the data; and a sign-off block (prepared, reviewed, approved).
+
+**The past typhoons are invented** (`backend/app/history.py`). Their names are not PAGASA names. Only each event's headline is written by hand; its interruption log is generated from a seed, and every figure on screen and in the PDF is counted from that log, so the numbers add up. The page and every PDF page say that the data is simulated.
 
 ### The road route
 
@@ -42,9 +54,13 @@ Three files drive the ranking. Replace them to run other cases or another policy
 
 **More to rank.** The supplied cases have one to four poles each. `backend/cases/extra_poles.json` adds six to nine more jobs to each (poles, transformers and line sections serving a public market, schools, a barangay hall, residential areas; some unsafe, flooded or already done), so every interruption has ten or eleven. They are added to the in-memory copy only, must pass the table's own checks, and are chosen so that **no expected answer changes**: a test checks that the database's own rule still gives every expected answer. Delete that file, or set `FIRSTLOOK_EXTRA_POLES=off`, to run the cases exactly as supplied.
 
+**Seven more cases.** The same file adds case-14 to case-20, written for this build to cover situations the supplied thirteen do not: two hospitals where one is only partly cleared of flood; every Critical job on flood hold; a restoration against an inspection; flood and unsafe roads holding everything; only residential jobs left; a tie that driving time decides between community services; and a tie that reports decide between two Critical jobs. Each has its own expected answer, which a test requires to be the answer the database's own rule gives. They are drawn in places that had no interruption yet: Sampaloc and Tondo in Manila, Makati, Pasig, Marikina, Taguig and Caloocan. They have no worked example in the reference records.
+
+**Plain titles.** The scenario names in the test file ("Safety first", "Critical before residential") name the rule being tested, not what is happening. The same file gives every case a title that says what is out and what makes it hard ("Hospital and evacuation center out: the hospital pole is not safe to reach"). The scenario name is still shown under *How Liwa decided*.
+
 The hierarchy, in short: **safety** first, then **flood clearance**, then the **highest customer tier**, the **most customers restored**, the **most reports**, and the **shortest driving ETA**.
 
-Each case's expected answer is shown beside Liwa's and is never sent to her. **A case never sees its own worked example**, since it contains the answer (`FIRSTLOOK_USE_OWN_EXAMPLE=1` allows it). In the last full run, with the extra equipment and the customer reports in front of her, all 13 first choices matched, and her whole order was the same as the database's own rule in all 13.
+Each case's expected answer is shown beside Liwa's and is never sent to her. **A case never sees its own worked example**, since it contains the answer (`FIRSTLOOK_USE_OWN_EXAMPLE=1` allows it). In the last full run, with the extra equipment and the customer reports in front of her, all 20 first choices matched, and her whole order was the same as the database's own rule in all 20. Once an interruption's conditions have been changed on screen, the scenario's expected answer no longer applies: her answer is then compared with what the written rule gives for the situation as it stands.
 
 ### Customer reports
 
@@ -125,29 +141,35 @@ Data (c) OpenStreetMap contributors, Open Database License. The credit appears o
 
 | Path | Contents |
 | --- | --- |
-| `backend/cases/meralco_demo.sqlite` | The 13 test cases, expected answers, and the policy as SQL views |
-| `backend/cases/extra_poles.json` | Extra equipment added to each case in memory, so there is more to rank |
+| `backend/cases/meralco_demo.sqlite` | The 13 supplied test cases, expected answers, and the policy as SQL views |
+| `backend/cases/extra_poles.json` | Added in memory: extra equipment for each case, seven more cases, and a plain title for every case |
 | `backend/reference/rag_documents.jsonl` | The team's reference records for the vector database: 7 policies, 13 worked examples |
 | `backend/reference/customer_reports.jsonl` | Draft policy records on how customer reports are weighed |
 | `backend/app/cases.py` | Reads the test cases |
 | `backend/app/case_reports.py` | Invented customer reports for each job, and the barangay each case is drawn in |
 | `backend/app/knowledge.py` | Turns the reference documents into records for the database |
 | `backend/app/liwa.py` | Liwa: the SQLite database, vector and keyword search, the decision through Claude Code, the fallback |
+| `backend/app/history.py` | The invented past typhoons and their interruption logs; the record of the typhoon in progress |
+| `backend/app/report_pdf.py` | The PDF reports (restoration report, situation report) |
 | `backend/app/main.py` | FastAPI endpoints under `/api` |
 | `backend/app/network.py`, `state.py`, `engine.py`, `reports.py`, `ai.py` | The simulated service area. The app now uses it for the barangays and the network on the map; its earlier screens (message reading, the engine's own ranking) are no longer shown |
 | `frontend/src/App.jsx` | The app: typhoon, then the interruptions |
 | `frontend/src/panel` | Side panel: the list of interruptions and the page for one |
 | `frontend/src/map` | Map, interruption pins and ranked poles (`CaseLayer.jsx`, `cases.js`), the crew's road route (`RouteLayer.jsx`, `route.js`), the blur outside the zone (`ZoneFocus.jsx`), the network layer (`GridLayer.jsx`, `network.js`) |
 | `frontend/src/typhoon` | The opening typhoon: generated track, map drawing, its panel |
+| `frontend/src/records` | The Typhoon records page: History and Reports |
 | `frontend/src/assistant` | Liwa: the 3D character and her panel |
 | `frontend/public/grid` | Road paths for the network's lines; Meralco offices from OpenStreetMap |
 | `scripts/` | Rebuild those two files |
 
 ## Limits
 
-- Everything is simulated. The 13 cases are test scenarios, not field records.
+- Everything is simulated. The 20 cases are test scenarios, not field records.
+- The past typhoons and their reports are generated. They show what a record and a report would look like, not how FirstLook performed in a real storm. A report covers one sector and gives no system-wide reliability figures (SAIFI, SAIDI).
+- The situation report is a snapshot from the server. Equipment marked resolved on screen is not in it.
 - Liwa's answer is written by Claude from the retrieved records and can still misapply them. The records and her reason are shown so a person can check, and the case file's own answer is shown beside hers.
-- The 13 of 13 result is on these 13 cases, with each case's own example held out. It says nothing yet about cases the policy records do not cover.
+- The 20 of 20 result is on these 20 cases. The 13 supplied ones had their own worked example held out; the 7 added ones were written by the same hand that wired up the ranking, with expected answers taken from the written rule, so they show consistency rather than independent proof. None of it says anything yet about cases the policy records do not cover.
+- A change of conditions is recorded in the server's working copy and is lost when the server restarts. When a site with no way in is made safe, its driving time is not in the case, so a fixed stand-in (5 to 17 minutes) is used.
 - ETAs are given in the case file. FirstLook does not compute travel time: the road route is drawn for orientation, between an office on a volunteer-made map and a pole position that is itself a drawing aid.
 - Resolve is kept on screen only. It is not saved, and it does not make Liwa rank again.
 - The customer reports are invented to fit each job's facts, so they agree with the case by construction. Real reports would be messier: wrong places, duplicates, rumours. How Liwa copes with those has not been tested.
