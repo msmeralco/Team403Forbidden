@@ -1,8 +1,8 @@
 // Priority colors mean one thing each, everywhere: on pins, in lists, in the report.
 export const TIERS = {
   critical: { label: 'Safety hazard', hint: 'Someone reported a live wire, sparks or a fallen pole. Make it safe first.' },
-  high: { label: 'Act now', hint: 'Many people affected, and one visit can clear up a lot.' },
-  medium: { label: 'Soon', hint: 'Worth a visit once the top places are covered.' },
+  high: { label: 'Essential facilities', hint: 'A hospital, health center, evacuation center or water pump is likely without power.' },
+  medium: { label: 'Homes', hint: 'Homes are reported or predicted without power.' },
   low: { label: 'Watch', hint: 'Few reports or little to learn from a visit right now.' },
   confirmed: { label: 'Damage found', hint: 'Someone on site confirmed damage. Repair is needed.' },
   unknown: { label: 'No reports yet', hint: 'Probably affected, but nobody has reported from here.' },
@@ -56,6 +56,9 @@ export const fmt = (n) => Math.round(n).toLocaleString('en-PH')
 // Account counts come from Meralco's records; rounded so they read as "about", not as exact live figures.
 export const about = (n) => (n < 1000 ? fmt(n) : fmt(Math.round(n / 100) * 100))
 export const plural = (n, one, many = `${one}s`) => `${fmt(n)} ${n === 1 ? one : many}`
+// What the AI reader caught that the keyword rules did not, in words.
+const CAUGHT = { hazard: 'a safety hazard', clue: 'a damage clue', vulnerable: 'a vulnerable person' }
+export const caughtText = (r) => (r.caught ?? []).map((c) => `${CAUGHT[c.what]}${c.by === 'photo' ? ' (from the photo)' : ''}`).join(' and ')
 export const gmaps = (pos) => `https://www.google.com/maps/search/?api=1&query=${pos[0]},${pos[1]}`
 export function likelihood(p) {
   if (p >= 0.85) return 'Almost certainly without power'

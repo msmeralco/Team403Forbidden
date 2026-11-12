@@ -1,6 +1,6 @@
-import { CATEGORY, SOURCES, ago, clock, day, fmt } from '../theme'
+import { CATEGORY, SOURCES, ago, caughtText, clock, day, fmt } from '../theme'
 import {
-  Comment, Globe, Heart, Photo, Repost, SOURCE_ICON, Share, ThumbUp, Views,
+  Comment, Globe, Heart, Repost, SOURCE_ICON, Share, ThumbUp, Views,
 } from '../icons'
 
 const AVATAR = ['#5B6EAE', '#3E8E7E', '#A0522D', '#7A5BA6', '#2F7FB5', '#8C6D1F', '#B5476A', '#4F7A3A']
@@ -49,9 +49,11 @@ export function ReportRow({ r, now, onOpen, showPlace = true }) {
           <span className="rr-foot">
             <Tag r={r} />
             {r.vulnerable && <span className="tag care">Vulnerable person mentioned</span>}
+            {r.caught && <span className="tag ai">Caught by AI</span>}
             {showPlace && <span className="muted">Brgy. {r.barangay}, {r.city.split(',')[0]}</span>}
           </span>
         </span>
+        {r.photo && <img className="rr-thumb" src={r.photo.url} alt="" />}
       </button>
     </li>
   )
@@ -175,30 +177,63 @@ function AppReport({ r }) {
         <dt>Submitted</dt><dd>{day(r.time)}, {clock(r.time)}</dd>
       </dl>
       <div className="tk-notes"><span className="muted small">Description</span><p>{r.text || <em className="muted">None given</em>}</p></div>
-      {m.photo && <div className="app-photo"><Photo size={22} /><span>Photo attached</span></div>}
     </article>
   )
 }
 
 const CARDS = { facebook_post: FacebookPost, facebook_comment: FacebookComment, x: XPost, sms: Sms, hotline: Hotline, app: AppReport }
 
-export function ReportFull({ r, now, also, onOpen, onArea }) {
+// The short labels that sum up one message: what it is, and who it mentions.
+export function Flags({ r }) {
+  const single = r.ai?.single_house && r.category !== 'noise'
+  if (!r.tag_label && !r.vulnerable && !single) return null
+  return (
+    <p className="rf-flags">
+      <Tag r={r} />
+      {r.vulnerable && <span className="tag care">Vulnerable person</span>}
+      {single && <span className="tag noise">Probably one house</span>}
+    </p>
+  )
+}
+
+// A resident's photo, shown as it was attached.
+export function Photo({ r }) {
+  return (
+    <figure className="rf-photo">
+      <img src={r.photo.url} alt="Photo attached by the resident" />
+      {r.photo.name && <figcaption><span className="muted small">Stand-in photo for the demo, not from this barangay.</span></figcaption>}
+    </figure>
+  )
+}
+
+export function ReportFull({ r, now, also, model, onOpen, onArea }) {
   const Card = CARDS[r.source]
+  const plain = r.category === 'outage' || r.category === 'follow_up'
   return (
     <div className="report-full">
       <div className="rf-source"><SourceBadge source={r.source} size={30} /><div><strong>{SOURCES[r.source].label}</strong><span className="muted small">{clock(r.time)}, {ago(r.time, now)}</span></div></div>
       <Card r={r} now={now} />
+      {r.photo && <Photo r={r} />}
       <section className="rf-triage">
-        <h3>What FirstLook read from this</h3>
-        <p><strong>{r.category === 'hazard' || r.category === 'clue' || r.category === 'noise' || r.category === 'restored' ? r.tag_label : r.after_repair ? 'Still no power after a repair' : CATEGORY[r.category]}</strong>
-          {r.category === 'hazard' && '. Pinned to the top of the list until someone marks it made safe.'}
-          {r.category === 'clue' && '. Hints at what broke, so whoever goes brings the right equipment.'}
-          {r.category === 'noise' && '. Counts very little, because it may be one house, not the whole area.'}
-          {r.category === 'restored' && '. Confirms the repair worked for this barangay.'}
-          {r.after_repair && r.category !== 'restored' && '. Tells FirstLook another break is likely, so the area goes back on the Check next list.'}
-          {!r.after_repair && (r.category === 'outage' || r.category === 'follow_up') && '. Counts as one more person without power in this barangay.'}
+        <h3>What FirstLook understood</h3>
+        {r.ai?.what && <p className="rf-what">{r.ai.what}</p>}
+        <Flags r={r} />
+        <p>
+          {r.category === 'hazard' && 'Pinned to the top of the list until someone marks it made safe.'}
+          {r.category === 'clue' && 'Hints at what broke, so whoever goes brings the right equipment.'}
+          {r.category === 'noise' && 'Counts very little, because it may be one house, not the whole area.'}
+          {r.category === 'restored' && 'Confirms the repair worked for this barangay.'}
+          {r.after_repair && r.category !== 'restored' && 'Still no power after a repair. Another break is likely, so the area goes back on the Check next list.'}
+          {!r.after_repair && plain && 'Counts as one more person without power in this barangay.'}
         </p>
-        {r.vulnerable && <p>Mentions someone vulnerable (elderly, sick or a baby).</p>}
+        {r.caught && (
+          <p className="rf-caught">
+            <strong>The AI reader caught {caughtText(r)}.</strong> The keyword rules alone filed this as “{CATEGORY[r.keyword_category] ?? 'No power'}”.
+          </p>
+        )}
+        <p className="muted small">
+          {r.ai ? `Read by the AI reader (${model}).` : r.after_repair ? '' : 'Sorted by keyword rules. The AI reader has not read this message.'}
+        </p>
         {also.length > 0 ? (
           <div className="rf-also">
             <p>The same person also reported through {also.length === 1 ? 'one other channel' : `${also.length} other channels`}. FirstLook counts them once.</p>

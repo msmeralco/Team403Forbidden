@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet.markercluster'
-import { MapContainer, Marker, Polyline, Tooltip, ZoomControl, useMap } from 'react-leaflet'
+import { MapContainer, Marker, Polyline, ZoomControl, useMap } from 'react-leaflet'
 import { addBasemap } from './basemap'
+import GridLayer from './GridLayer'
+import TyphoonLayer from '../typhoon/TyphoonLayer'
+import { PIN_MESSAGES } from '../features'
 import { TIERS, areaTier, tierRank } from '../theme'
 import { svg } from '../icons'
 
@@ -28,11 +31,11 @@ function Camera({ bounds, focus, padLeft, mobile }) {
       : { paddingTopLeft: [padLeft + 30, 90], paddingBottomRight: [40, 40] }
     if (first.current) {
       first.current = false
-      map.fitBounds(bounds, pad)
+      map.fitBounds(bounds, { ...pad, animate: false })   // no opening animation: it would finish late and undo a later view
       return
     }
     if (!focus) return
-    if (focus.bounds) map.flyToBounds(focus.bounds, { ...pad, maxZoom: 13.5, duration: 0.8 })
+    if (focus.bounds) map.flyToBounds(focus.bounds, { ...pad, maxZoom: focus.maxZoom ?? 13.5, duration: 0.8 })
     else if (focus.pos) {
       const z = Math.max(map.getZoom(), focus.zoom ?? 14)
       const target = map.project(focus.pos, z).subtract([mobile ? 0 : padLeft / 2, mobile ? -window.innerHeight * 0.2 : 0])
@@ -108,9 +111,6 @@ const targetIcon = L.divIcon({
   html: `<div class="target-mk"><i>${svg.target}</i><span>Check here</span></div>`,
 })
 // Drawn just left of the barangay pin so it never covers the pin's count tab.
-const siteIcon = L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [36, 30], html: `<div class="site-mk">${svg.hospital}</div>` })
-const closedIcon = L.divIcon({ className: '', iconSize: [20, 20], iconAnchor: [10, 10], html: `<div class="closed-mk">${svg.closed}</div>` })
-const mid = (r) => [(r.a[0] + r.b[0]) / 2, (r.a[1] + r.b[1]) / 2]
 
 function useZoom() {
   const map = useMap()
@@ -134,7 +134,7 @@ function Cased({ positions, color, weight, dash }) {
 
 // Everything drawn over the basemap. Detail appears as you zoom in, so the zoomed-out
 // view stays readable: barangay pins only.
-function Overlays({ state, reports, sel, layers, onSelectArea, onSelectReport, onToggleRoad }) {
+function Overlays({ state, reports, sel, layers, onSelectArea, onSelectReport }) {
   const zoom = useZoom()
   const close = zoom >= 12
   const rec = sel?.kind === 'priority' ? state.recommendations.find((r) => r.asset_id === sel.id) : null
@@ -142,33 +142,12 @@ function Overlays({ state, reports, sel, layers, onSelectArea, onSelectReport, o
   const lit = rec ? new Set(rec.covers.areas.map((a) => a.id)) : null
   const report = sel?.kind === 'report' ? reports.find((r) => r.id === sel.id) : null
   const areaId = sel?.kind === 'area' ? sel.id : report?.area_id
-  const dots = areaId ? reports.filter((r) => r.area_id === areaId) : []
-  const sites = state.areas.filter((a) => a.critical.length && a.p_out >= 0.5)
-  const closed = state.roads.filter((r) => r.blocked)
+  // A message opened from the Messages tab shows its barangay's messages on the map. Opening a pin does not, for now.
+  const dots = areaId && (report || PIN_MESSAGES) ? reports.filter((r) => r.area_id === areaId) : []
 
   return (
     <>
-      {layers.roads && state.roads.filter((r) => !r.blocked).map((r) => (
-        <Polyline key={`open-${r.id}`} positions={[r.a, r.b]} eventHandlers={{ click: () => onToggleRoad(r) }}
-          pathOptions={{ color: '#5F6368', weight: 9, opacity: 0.22, lineCap: 'round', className: 'road-hit' }}>
-          <Tooltip sticky>{r.name}: open. Click to mark it closed.</Tooltip>
-        </Polyline>
-      ))}
-      {closed.map((r) => (
-        <Polyline key={`closed-${r.id}`} positions={[r.a, r.b]} eventHandlers={{ click: () => onToggleRoad(r) }}
-          pathOptions={{ color: '#C5221F', weight: close ? 5 : 3.5, opacity: 0.8, lineCap: 'round', dashArray: '1 8', className: 'road-hit' }}>
-          <Tooltip sticky>{r.name}: closed{layers.roads ? '. Click to reopen.' : ''}</Tooltip>
-        </Polyline>
-      ))}
-      {close && closed.map((r) => <Marker key={`cm-${r.id}`} position={mid(r)} icon={closedIcon} interactive={false} />)}
-
       {rec && <Cased key={`pv-${rec.asset_id}-${rec.route.km}`} positions={rec.route.points} color={BLUE} weight={4} dash="1 9" />}
-
-      {layers.critical && close && sites.map((a) => (
-        <Marker key={`site-${a.id}`} position={a.pos} icon={siteIcon}>
-          <Tooltip direction="top" offset={[0, -8]}>{a.critical.join(', ')}, Brgy. {a.barangay}</Tooltip>
-        </Marker>
-      ))}
 
       {layers.reports && <AreaPins areas={state.areas} selectedArea={areaId} lit={lit} showOk={close} onSelect={onSelectArea} />}
 
@@ -183,16 +162,26 @@ function Overlays({ state, reports, sel, layers, onSelectArea, onSelectReport, o
   )
 }
 
-export default function MapView({ state, reports, sel, layers, focus, padLeft, mobile, onSelectArea, onSelectReport, onToggleRoad, onBasemap }) {
+export default function MapView({ state, reports, sel, layers, focus, padLeft, mobile, typhoon, zoneKm, onSelectArea, onSelectReport, onSelectPlace, onBasemap, onError }) {
   const bounds = useMemo(() => L.latLngBounds([...state.areas.map((a) => a.pos), ...state.assets.map((a) => a.pos)]), []) // eslint-disable-line
   return (
     <div className="map">
-      <MapContainer bounds={bounds} zoomSnap={0.25} minZoom={8} maxZoom={19} scrollWheelZoom zoomControl={false}>
+      <MapContainer bounds={bounds} zoomSnap={0.25} minZoom={5} maxZoom={19} scrollWheelZoom zoomControl={false}>
         <Basemap onKind={onBasemap} clean={!layers.landmarks} />
         <Camera bounds={bounds} focus={focus} padLeft={padLeft} mobile={mobile} />
         {!mobile && <ZoomControl position="bottomright" />}
-        <Overlays state={state} reports={reports} sel={sel} layers={layers}
-          onSelectArea={onSelectArea} onSelectReport={onSelectReport} onToggleRoad={onToggleRoad} />
+        {typhoon ? (
+          // Before and during the typhoon the map shows only the storm: no reports, no pins.
+          <TyphoonLayer track={typhoon.track} running={typhoon.running} home={bounds} onTick={typhoon.onTick} onDone={typhoon.onDone}
+            pad={mobile ? { paddingTopLeft: [20, 120], paddingBottomRight: [20, window.innerHeight * 0.45] } : { paddingTopLeft: [padLeft + 30, 90], paddingBottomRight: [40, 40] }} />
+        ) : (
+          <>
+            <GridLayer state={state} sel={sel} show={layers.grid} offices={layers.offices} zoneKm={zoneKm}
+              onSelectAsset={onSelectPlace} onSelectArea={onSelectArea} onError={onError} />
+            <Overlays state={state} reports={reports} sel={sel} layers={layers}
+              onSelectArea={onSelectArea} onSelectReport={onSelectReport} />
+          </>
+        )}
       </MapContainer>
     </div>
   )

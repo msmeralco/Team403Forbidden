@@ -3,15 +3,19 @@
 FirstLook advises; it does not dispatch or track crews. It ranks the places worth checking,
 and whoever goes out reports back what they found, which updates the ranking.
 """
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from uuid import uuid4
 
 import numpy as np
 
+from . import ai
 from .config import CONFIG, Config
 from .engine import Model, entropy
 from .network import AREAS, ASSETS, DEFAULT_BLOCKED, OFFICES, SUBSTATION, Roads
-from .reports import MANILA, SOURCES, STORM, after_repair, all_clear_time, generate, summarize
+from .reports import (DEMO_EXTRAS, MANILA, SOURCES, STORM, after_repair, all_clear_time, generate,
+                      handwritten, one_report, summarize)
 
 RESOURCES = {
     "segment": "Line crew + conductor span",
@@ -34,7 +38,7 @@ CAVEAT = ("Recommendation depends on scenario coverage (up to two simultaneous f
 
 # The fixed demo storm. People reporting per barangay (after de-duplication), one live
 # wire in Meycauayan, and a few damage clues. Rodriguez lost power, but few people could
-# report it: a "quiet area". Central QC and Landayan send a few stray reports.
+# report it: a "quiet area". Landayan sends a couple of stray reports.
 # Three breaks: the Malhacan transformer, the Marcos Hwy switch, and a hidden second break
 # on the Gen. Luna Ave line behind it, which only shows up once the switch is repaired.
 DEMO_TRUTH = ("LS-07", "L2", "T-03")
@@ -43,7 +47,7 @@ DEMO_VOICES = {
     "ant-san-roque": 40, "ant-dela-paz": 30, "ant-san-isidro": 22,
     "sm-guitnang-bayan": 28, "sm-ampid": 20, "sm-banaba": 12,
     "rod-san-jose": 4, "rod-burgos": 3, "rod-manggahan": 2,
-    "qc-central": 1, "sp-landayan": 2,
+    "sp-landayan": 2,     # Central QC's one stray report is hand-written (see DEMO_EXTRAS)
 }
 DEMO_HAZARDS = {"mey-malhacan": "live_wire"}
 DEMO_CLUES = {"mey-pandayan": ["transformer"], "sm-ampid": ["tree"], "ant-dela-paz": ["tree"]}
@@ -51,6 +55,29 @@ DEMO_CLUES = {"mey-pandayan": ["transformer"], "sm-ampid": ["tree"], "ant-dela-p
 
 class Conflict(ValueError):
     """The request is valid but not allowed in the current state."""
+
+
+class NeedsPlace(Conflict):
+    """A new message could not be placed on the map without being told the barangay."""
+
+
+PHOTO_HAZARD = {"wire_down": "live_wire", "pole_down": "pole_down", "pole_leaning": "pole_down"}
+PHOTO_CLUE = {"tree_on_line": "tree", "transformer_damage": "transformer"}
+
+
+# How much an essential site counts in the ranking. Anything unlisted counts as 1.
+ESSENTIAL = (("hospital", 3), ("health", 2), ("evacuation", 2), ("water", 2))
+
+
+def essential_weight(name: str) -> int:
+    return max((w for key, w in ESSENTIAL if key in name.lower()), default=1)
+
+
+# Where a piece of equipment sits in the network. The closer to the substation, the more depends on it.
+NETWORK_LEVEL = {"segment": (1, "Main line"), "switch": (2, "Switch on the main line"), "pole": (2, "Pole on the main line"),
+                 "lateral": (3, "Branch line"), "transformer": (4, "Distribution transformer")}
+KW_PER_ACCOUNT = 0.5      # rough demand per customer account, used only to give a sense of load
+PLAUSIBLE = 0.05          # below this chance of damage, the evidence points elsewhere and the place waits at the bottom
 
 
 def _short(city: str) -> str:
@@ -71,14 +98,25 @@ def about(n: float) -> str:
 
 
 class Session:
-    def __init__(self, cfg: Config = CONFIG, seed: int | None = None):
+    def __init__(self, cfg: Config = CONFIG, seed: int | None = None, scenario: dict | None = None):
+        """The demo storm (no arguments), a random storm (seed), or one stage of a test case
+        (scenario: see cases.py; what is damaged is given, the rest is simulated unless stated)."""
         self.cfg, self.seed, self.id = cfg, seed, uuid4().hex[:8]
+        self.name, self.kind, self.case = f"Typhoon {STORM}", "typhoon", None
         self.started = datetime.now(MANILA)
         self.model = m = Model(ASSETS, cfg)
         self.roads = Roads(DEFAULT_BLOCKED, cfg)
-        self.rng = np.random.default_rng(7 if seed is None else seed)
+        self.rng = np.random.default_rng(scenario.get("seed", 1) if scenario else 7 if seed is None else seed)
         self.row_of = {m.ids[t]: row for row, t in enumerate(m.transformers)}
-        if seed is None:
+        if scenario is not None:
+            self.name, self.kind = scenario.get("name") or self.name, scenario.get("kind", "typhoon")
+            self.truth = m.scenarios.index(tuple(sorted(m.idx[a] for a in scenario["damaged"])))
+            area_voices, hazards, clues = self._storm_details()
+            if "reports" in scenario:
+                area_voices = {k: int(v) for k, v in scenario["reports"].items() if v}
+            if "hazards" in scenario:
+                hazards = dict(scenario["hazards"])
+        elif seed is None:
             self.truth = m.scenarios.index(tuple(sorted(m.idx[a] for a in DEMO_TRUTH)))
             area_voices, hazards, clues = dict(DEMO_VOICES), dict(DEMO_HAZARDS), dict(DEMO_CLUES)
         else:
@@ -88,11 +126,14 @@ class Session:
         out_areas = {a.id for a in AREAS if self.row_of[a.transformer] in out_rows}
         self.all_clear = all_clear_time()
         self.reports = generate(self.rng, area_voices, out_areas, hazards, clues, self.all_clear)
-        self.area_stats = summarize(self.reports)
-        self.voices = np.zeros(len(m.transformers), dtype=int)
-        for a in AREAS:
-            self.voices[self.row_of[a.transformer]] += self.area_stats.get(a.id, {}).get("people", 0)
-        self.reported = self.voices > 0
+        if seed is None and scenario is None:   # the demo storm also carries hand-written messages, some with photos
+            self.reports += handwritten(self.rng, DEMO_EXTRAS, self.all_clear, 9000)
+            self.reports.sort(key=lambda r: r["time"], reverse=True)
+        self.lock = threading.RLock()     # the AI reader updates reports from another thread
+        self.alive = True
+        self.uploads: dict[str, tuple[bytes, str]] = {}   # report id -> photo typed in during the demo
+        self.added = 0
+        self._recount()
         self.hazard_handled: dict[str, str] = {}   # area id -> who made it safe
 
         self.observations: list[dict] = []
@@ -110,6 +151,142 @@ class Session:
             self.ancestors[i] = chain
         self.h0 = float(entropy(self.posterior()))
         self.history = [{"t": 0.0, "pct": 100.0}]
+        self.ai = {"status": ai.availability(), "model": ai.MODEL, "read": 0, "total": 0, "error": None}
+        if self.ai["status"] == "ready":
+            self._start_reading()
+
+    def _recount(self) -> None:
+        """Per-barangay tallies and people per transformer, from the current reports."""
+        self.area_stats = summarize(self.reports)
+        self.voices = np.zeros(len(self.model.transformers), dtype=int)
+        for a in AREAS:
+            self.voices[self.row_of[a.transformer]] += self.area_stats.get(a.id, {}).get("people", 0)
+        self.reported = self.voices > 0
+
+    # ---- AI reader ---------------------------------------------------------
+    @staticmethod
+    def _raise(r: dict, category: str, tag: str, label: str, by: str) -> None:
+        """The AI can raise a flag on a report, never lower one."""
+        r.setdefault("keyword_category", r["category"])
+        r.update(category=category, tag=tag, tag_label=label)
+        r.setdefault("caught", []).append({"what": category, "by": by})
+
+    def apply_reading(self, r: dict, reading: dict) -> None:
+        """Attach what the AI read in the message, and raise flags the keyword rules missed."""
+        if reading["hazard"] != "none" and r["category"] != "hazard":
+            self._raise(r, "hazard", reading["hazard"], ai.HAZARD_LABEL[reading["hazard"]], "message")
+        elif reading["clue"] != "none" and r["category"] not in ("hazard", "clue"):
+            self._raise(r, "clue", reading["clue"], ai.CLUE_LABEL[reading["clue"]], "message")
+        if reading["vulnerable"] and not r["vulnerable"]:
+            r["vulnerable"] = True
+            r.setdefault("caught", []).append({"what": "vulnerable", "by": "message"})
+        r["ai"] = reading
+
+    def apply_photo(self, r: dict, reading: dict) -> None:
+        """Attach what the AI saw in the photo, and raise flags the words alone did not."""
+        r["photo"]["ai"] = reading
+        if reading["hazard"] and r["category"] != "hazard":
+            tag = PHOTO_HAZARD.get(reading["damage"], "other")
+            self._raise(r, "hazard", tag, ai.HAZARD_LABEL[tag], "photo")
+        elif reading["damage"] in PHOTO_CLUE and r["category"] not in ("hazard", "clue"):
+            tag = PHOTO_CLUE[reading["damage"]]
+            self._raise(r, "clue", tag, ai.CLUE_LABEL[tag], "photo")
+
+    def _start_reading(self) -> None:
+        todo = [r for r in self.reports if not r.get("after_repair")]
+        self.ai.update(status="reading", total=len(todo), read=0)
+        threading.Thread(target=self._read_all, args=(todo,), daemon=True).start()
+
+    def _read_all(self, todo: list[dict]) -> None:
+        try:
+            for r in todo:   # photos first: there are few, and they are what people open
+                if not self.alive:
+                    return
+                if r.get("photo", {}).get("name"):
+                    image, media = ai.photo_bytes(r["photo"]["name"])
+                    reading = ai.read_photo(image, media, r["text"])
+                    with self.lock:
+                        self.apply_photo(r, reading)
+                        self._recount()
+            batches = [todo[i:i + ai.BATCH] for i in range(0, len(todo), ai.BATCH)]
+
+            def work(batch: list[dict]) -> tuple[list[dict], dict]:
+                items = [{"id": r["id"], "channel": r["source_label"], "text": r["text"]}
+                         for r in batch if r["text"].strip()]
+                return batch, (ai.read_messages(items) if items and self.alive else {})
+
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                for batch, readings in pool.map(work, batches):
+                    if not self.alive:
+                        return
+                    with self.lock:
+                        for r in batch:
+                            if r["id"] in readings:
+                                self.apply_reading(r, readings[r["id"]])
+                        self.ai["read"] += len(batch)
+                        self._recount()
+            self.ai["status"] = "done"
+        except ai.AIError as e:
+            self.ai.update(status="error", error=str(e))
+        except Exception:   # the reader must never take the app down with it
+            self.ai.update(status="error", error="The AI reader stopped unexpectedly.")
+
+    def ai_view(self) -> dict:
+        caught = [c for r in self.reports for c in r.get("caught", [])]
+        return {**self.ai,
+                "caught": {k: sum(1 for c in caught if c["what"] == k) for k in ("hazard", "clue", "vulnerable")},
+                "caught_reports": sum(1 for r in self.reports if r.get("caught")),
+                "photos": sum(1 for r in self.reports if r.get("photo", {}).get("ai"))}
+
+    def add_report(self, text: str, source: str = "facebook_post", area_id: str | None = None,
+                   photo: tuple[bytes, str] | None = None, sample: str | None = None) -> dict:
+        """A message typed in during the demo. It is read, placed on the map and counted like
+        any other report."""
+        text = text.strip()
+        if source not in SOURCES:
+            raise KeyError(f"Unknown channel {source}")
+        if sample:
+            try:
+                photo = ai.photo_bytes(sample)
+            except FileNotFoundError:
+                raise KeyError(f"Unknown sample photo {sample}") from None
+        if not text and not photo:
+            raise Conflict("Type a message or add a photo first")
+        reading = seen = note = None
+        if ai.availability() == "ready":
+            try:
+                if text:
+                    reading = ai.read_messages([{"id": "new", "channel": SOURCES[source]["label"], "text": text}]).get("new")
+                if photo:
+                    seen = ai.read_photo(photo[0], photo[1], text)
+            except ai.AIError as e:
+                note = str(e)
+        if not area_id and reading and reading["place"] != "unknown":
+            area_id = reading["place"]
+        area = next((a for a in AREAS if a.id == area_id), None)
+        if area_id and not area:
+            raise KeyError(f"Unknown area {area_id}")
+        if not area:
+            raise NeedsPlace("FirstLook couldn't tell which barangay this is about. Pick one and send it again.")
+        with self.lock:
+            self.added += 1
+            now = self.all_clear + timedelta(minutes=self.elapsed)
+            r = one_report(self.rng, area, source, text, now, self.all_clear, 20000 + self.added,
+                           800000 + self.added, author="You (demo)")
+            r["added"] = True
+            if photo:
+                if sample:
+                    r["photo"] = {"name": sample, "url": f"/api/photos/{sample}"}
+                else:
+                    self.uploads[r["id"]] = photo
+                    r["photo"] = {"url": f"/api/reports/{r['id']}/photo"}
+                if seen:
+                    self.apply_photo(r, seen)
+            if reading:
+                self.apply_reading(r, reading)
+            self.reports.insert(0, r)
+            self._recount()
+        return {"report": r, "note": note, "read_by": "ai" if (reading or seen) else "keywords"}
 
     def _random_storm(self) -> tuple[dict, dict, dict]:
         """Draw a hidden scenario, how many people report per barangay, hazards and clues."""
@@ -119,6 +296,15 @@ class Session:
             voices = m.draw_voices(rng, self.truth)
             if voices.any():
                 break
+        return self._storm_details(voices)
+
+    def _storm_details(self, voices: np.ndarray | None = None) -> tuple[dict, dict, dict]:
+        """For the hidden scenario already chosen: who reports from where, and which hazards and clues they mention."""
+        m, rng = self.model, self.rng
+        for _ in range(20):                      # a small fault can draw no reports at all; try again a few times
+            if voices is not None and voices.any():
+                break
+            voices = m.draw_voices(rng, self.truth)
         failed = {m.ids[i] for i in m.scenarios[self.truth]}
         area_voices, hazards, clues = {}, {}, {}
         for row, t in enumerate(m.transformers):
@@ -274,11 +460,44 @@ class Session:
             return f"Tells whether the outage in {_join(cities)} starts here or at its own transformer."
         return "No reports downstream; a visit mainly rules it out."
 
-    def _headline(self, i: int, cov: dict, hazard: list[dict]) -> str:
+    def _basis(self, i: int, cov: dict, hazard: list[dict], pout: np.ndarray, p_damaged: float) -> dict:
+        """What the ranking looks at, in order: safety, essential facilities, where the equipment sits in
+        the network, customers and load, reports, and how quickly it can be reached.
+
+        Customers is predictive: the accounts the engine expects to be dark behind this place, whether or
+        not anyone has reported. Reports is reactive: the people who told us."""
+        areas = self._areas_behind(i)
+        dark = [(a, float(pout[self.row_of[a.transformer]])) for a in areas]
+        essential = [{"name": f, "area": a.barangay, "weight": essential_weight(f)}
+                     for a, p in dark if p >= 0.5 for f in a.critical]
+        essential.sort(key=lambda e: -e["weight"])
+        reported = cov["people"]
+        predicted = int(round(sum(p * a.households for a, p in dark)))
+        total_reported = max(sum(st["people"] for st in self.area_stats.values()), 1)
+        total_accounts = max(float(self.model.households.sum()), 1.0)
+        homes = 0.5 * reported / total_reported + 0.5 * p_damaged * predicted / total_accounts
+        level, level_label = NETWORK_LEVEL[self.model.assets[i].type]
+        return {
+            "safety": [f"{h['label']} in {h['area']}" for h in hazard],
+            "essential": essential, "essential_score": sum(e["weight"] for e in essential),
+            "level": level, "level_label": level_label,
+            "load_mw": round(predicted * KW_PER_ACCOUNT / 1000, 1),
+            "reported_people": reported, "predicted_accounts": predicted,
+            "p_damaged": round(p_damaged, 3), "homes_score": round(homes, 4),
+        }
+
+    def _headline(self, i: int, cov: dict, hazard: list[dict], basis: dict | None = None) -> str:
         a = self.model.assets[i]
         if hazard:
             h = hazard[0]
             return f"Safety first: {h['label'].lower()} reported in {h['area']}, {h['city']}"
+        if basis and basis["essential"]:
+            e, more = basis["essential"][0], len(basis["essential"]) - 1
+            also = f" and {more} more essential {'site' if more == 1 else 'sites'}" if more else ""
+            return f"{e['name'].split(' (')[0]} in {e['area']}{also} likely without power"
+        if basis and (basis["reported_people"] or basis["predicted_accounts"] >= 100):
+            told = f"{basis['reported_people']} people reported" if basis["reported_people"] else "Nobody has reported yet"
+            return f"{told}; about {about(basis['predicted_accounts'])} accounts predicted without power"
         if a.type != "transformer" and len(cov["cities"]) >= 2:
             return f"One visit could explain outages in {len(cov['areas'])} barangays"
         if cov["areas"]:
@@ -306,6 +525,7 @@ class Session:
             weight = self.priority.get(a.id, 1.0)
             info_rate = float(gain[i]) / (travel + inspect) * 60      # bits per hour
             cov, hazard = self._covers(i, pout), self._hazard_here(i)
+            basis = self._basis(i, cov, hazard, pout, float(marg[i]))
             recs.append({
                 "asset_id": a.id, "name": a.name, "type": a.type, "kind": PLAIN_TYPE[a.type], "place": a.place,
                 "score": info_rate * float(urg[i]) * weight,
@@ -314,20 +534,35 @@ class Session:
                 "p_damaged": round(float(marg[i]), 3),
                 "travel_min": round(travel), "inspect_min": inspect, "from": office,
                 "route": self.roads.route(node, a.id),
-                "priority": weight, "hazard": hazard, "covers": cov,
-                "headline": self._headline(i, cov, hazard), "reason": self._reason(i, cov),
+                "priority": weight, "hazard": hazard, "covers": cov, "basis": basis,
+                "headline": self._headline(i, cov, hazard, basis), "reason": self._reason(i, cov),
             })
-        recs.sort(key=lambda r: (not r["hazard"], -r["score"]))
-        top = max((r["score"] for r in recs), default=0.0) or 1.0
-        for rank, r in enumerate(recs, 1):
-            rel = r["score"] / top
-            r["rank"], r["score_rel"], r["score"] = rank, round(rel, 3), round(r["score"], 3)
+        # The ranking rule, in strict order (how utilities, Meralco included, describe restoring after a storm):
+        #   1. safety      an open hazard (live wire, sparks, fallen pole) at this place
+        #   2. essential   hospitals, health and evacuation centres, water pumping behind it, likely dark
+        #   3. network     main line before switch or pole, before branch line, before transformer
+        #   4. customers   accounts predicted dark behind it (and so the load)
+        #   5. reports     people who reported from behind it
+        #   6. access      shorter drive first
+        # The order applies to places where damage is plausible. A place the evidence points away from (for
+        # example a main line that is clearly live because a barangay behind it has power), or where a visit
+        # would tell us almost nothing, waits at the bottom whatever is behind it. A place a dispatcher raised
+        # or lowered by hand moves within its level.
+        for r in recs:
+            b = r["basis"]
             if r["hazard"]:
                 r["tier"] = "critical"
-            elif r["info_gain_bits"] < 0.05:   # a visit would tell us almost nothing new
+            elif r["info_gain_bits"] < 0.05 or b["p_damaged"] < PLAUSIBLE:
                 r["tier"] = "low"
             else:
-                r["tier"] = "high" if rel >= 0.6 else "medium" if rel >= 0.25 else "low"
+                r["tier"] = "high" if b["essential_score"] else "medium"
+        level = {"critical": 0, "high": 1, "medium": 1, "low": 2}
+        recs.sort(key=lambda r: (level[r["tier"]], -r["basis"]["essential_score"], r["basis"]["level"],
+                                 -r["basis"]["predicted_accounts"] * r["priority"], -r["basis"]["reported_people"],
+                                 r["travel_min"]))
+        top = max((r["score"] for r in recs), default=0.0) or 1.0
+        for rank, r in enumerate(recs, 1):
+            r["rank"], r["score_rel"], r["score"] = rank, round(r["score"] / top, 3), round(r["score"], 3)
         return recs, excluded
 
     def explain(self, asset_id: str) -> dict:
@@ -404,8 +639,9 @@ class Session:
             for ar in AREAS:
                 if ar.transformer == m.ids[m.transformers[row]] and (self.area_stats.get(ar.id) or dark):
                     new_reports += after_repair(self.rng, ar, dark, now, 5000 + len(self.reports) + len(new_reports))
-        self.reports = sorted(self.reports + new_reports, key=lambda r: r["time"], reverse=True)
-        self.area_stats = summarize(self.reports)
+        with self.lock:
+            self.reports = sorted(self.reports + new_reports, key=lambda r: r["time"], reverse=True)
+            self.area_stats = summarize(self.reports)
         return self.repaired[asset_id]
 
     def restrict(self, asset_id: str, restricted: bool) -> None:
@@ -591,12 +827,17 @@ class Session:
         }
 
     def state(self) -> dict:
+        with self.lock:
+            return self._state()
+
+    def _state(self) -> dict:
         post = self.posterior()
         recs, excluded = self.recommendations()
         areas = self.areas_view(post, recs)
         now = self.all_clear + timedelta(minutes=self.elapsed)
         return {
-            "event": {"id": self.id, "name": f"Typhoon {STORM}", "drill": True, "synthetic": True,
+            "case": self.case,
+            "event": {"id": self.id, "name": self.name, "kind": self.kind, "drill": True, "synthetic": True,
                       "seed": self.seed, "all_clear": self.all_clear.isoformat(), "now": now.isoformat()},
             "substation": {**SUBSTATION, "pos": [SUBSTATION["lat"], SUBSTATION["lon"]]},
             "offices": [{"name": name, "pos": list(self.roads.pos[node])} for node, name in OFFICES],
@@ -609,4 +850,5 @@ class Session:
             "recommendations": recs, "excluded": excluded,
             "log": list(reversed(self.observations)), "resources": self.resources(post),
             "handoff": self.handoff(post), "repaired": self.repaired_view(post),
+            "ai": self.ai_view(),
         }

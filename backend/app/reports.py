@@ -286,8 +286,7 @@ def _meta(rng, source: str, kind: str, person: dict, seq: int) -> dict:
         secs = int(rng.integers(70, 420))
         return {"ticket": f"HL-{seq:06d}", "duration": f"{secs // 60}m {secs % 60:02d}s",
                 "agent": f"CSR-{int(rng.integers(100, 399))}", "caller": person["name"]}
-    return {"ref": f"OR-{seq:07d}", "service_id": person["service_id"],
-            "photo": bool(loud or rng.random() < 0.2), "account": person["name"]}
+    return {"ref": f"OR-{seq:07d}", "service_id": person["service_id"], "account": person["name"]}
 
 
 def generate(rng: np.random.Generator, area_voices: dict[str, int], out_areas: set[str],
@@ -351,6 +350,74 @@ def generate(rng: np.random.Generator, area_voices: dict[str, int], out_areas: s
                 })
     reports.sort(key=lambda r: r["time"], reverse=True)
     return reports
+
+
+# Hand-written messages for the demo storm, in the messy way people really write, some with
+# a photo. The keyword rules miss what matters in most of them: they are here to show what
+# reading for meaning adds. Photos are stand-ins from Wikimedia Commons (see photos/CREDITS.md).
+DEMO_EXTRAS = [
+    {"area": "mey-malhacan", "source": "facebook_post", "photo": "lines-down-road.jpg",
+     "text": "Ito po yung live wire na nakalaylay dito sa Malhacan, tapat ng elementary school. Kanina pa po yan, daming batang dumadaan ⚠️ @Meralco"},
+    {"area": "sm-ampid", "source": "facebook_post",
+     "text": "grabe dito samen sa may tulay pa-Ampid, may kumikislap sa taas ng poste tas amoy natutunaw na goma 😨 wag muna dumaan mga ka-barangay"},
+    {"area": "sm-guitnang-bayan", "source": "x",
+     "text": "@meralco yung kable sa tapat ng tricycle terminal sa Guitnang Bayan nakasayad na sa bubong ng mga tricycle, dinadaan-daanan lang ng mga tao 😬"},
+    {"area": "sm-banaba", "source": "facebook_comment",
+     "text": "Banaba po. 2 gabi na. Yung kapatid ko naka-ventilator sa bahay, paubos na yung battery backup namin. Pakiusap po 🙏"},
+    {"area": "rod-san-jose", "source": "sms",
+     "text": "d2 sa san jose montalban bumigay ung malaking sanga ng acacia nakapatong na sa mga linya. wala ilaw buong looban"},
+    {"area": "mey-pandayan", "source": "app", "photo": "leaning-pole.jpg",
+     "text": "Nakahilig na po yung poste sa kanto namin, parang babagsak na pag humangin ulit"},
+    {"area": "mey-saluysoy", "source": "facebook_post", "photo": "pole-down-street.jpg",
+     "text": "Bagsak yung poste dito sa Saluysoy, nakahambalang sa daan pati yung mga bakal sa taas"},
+    {"area": "sm-guitnang-bayan", "source": "x", "photo": "tree-on-lines.jpg",
+     "text": "@meralco natumba yung puno ng mangga sa may court, sabit sa mga kable. kaya pala wala kaming kuryente"},
+    {"area": "rod-burgos", "source": "app", "photo": "pole-down-field.jpg",
+     "text": "Putol yung poste malapit sa bukid, nakahiga na pati mga insulator. Walang signal kagabi kaya ngayon lang nakapag-report"},
+    {"area": "ant-san-isidro", "source": "facebook_post", "photo": "typhoon-debris.jpg",
+     "text": "Ganito itsura dito sa San Isidro ngayong umaga. Wala pa ring kuryente, ang daming kalat sa daan"},
+    {"area": "qc-central", "source": "app", "photo": "street-normal.jpg",
+     "text": "Brownout sa unit namin since kagabi pero ok naman sa katabing building, may ilaw pa nga yung poste sa labas"},
+]
+
+
+def one_report(rng: np.random.Generator, area: Area, source: str, text: str, when: datetime,
+               all_clear: datetime, person_no: int, seq: int, author: str | None = None,
+               photo: dict | None = None) -> dict:
+    """A single report written by hand or typed into the app, in the same shape as generated ones."""
+    person = _person(rng, person_no)
+    if author:
+        person["name"], person["initials"] = author, "".join(w[0] for w in author.split()[:2]).upper()
+    extra = {}
+    if source == "hotline":
+        extra["call_category"] = "No power – area"
+    elif source == "app":
+        extra["outage_type"] = "No power"
+    tri = classify(text)
+    report = {
+        "id": f"R{seq}", "source": source, "source_label": SOURCES[source]["label"],
+        "channel": SOURCES[source]["channel"], "time": when.isoformat(),
+        "minutes_before_clear": int((all_clear - when).total_seconds() // 60),
+        "area_id": area.id, "barangay": area.barangay, "city": area.city,
+        "transformer": area.transformer,
+        "pos": [round(area.lat + float(rng.normal(0, 0.0028)), 5), round(area.lon + float(rng.normal(0, 0.0028)), 5)],
+        "person_id": person["id"], "author": person["name"], "initials": person["initials"],
+        "text": text, **tri, "meta": {**_meta(rng, source, "outage", person, seq), **extra},
+    }
+    if photo:
+        report["photo"] = dict(photo)
+    return report
+
+
+def handwritten(rng: np.random.Generator, extras: list[dict], all_clear: datetime, people_from: int) -> list[dict]:
+    by_id = {a.id: a for a in AREAS}
+    out = []
+    for n, e in enumerate(extras):
+        when = all_clear - timedelta(minutes=float(rng.uniform(25, 240)))
+        photo = {"name": e["photo"], "url": f"/api/photos/{e['photo']}"} if e.get("photo") else None
+        out.append(one_report(rng, by_id[e["area"]], e["source"], e["text"], when, all_clear,
+                              people_from + n, 700000 + n, photo=photo))
+    return out
 
 
 def after_repair(rng: np.random.Generator, area: Area, dark: bool, when: datetime, people_from: int) -> list[dict]:
