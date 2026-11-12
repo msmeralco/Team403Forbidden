@@ -1,0 +1,28 @@
+{
+  "name": "Example: Typhoon Dalisay, then two interruptions",
+  "description": "A worked example of the case format. Copy it, rename it, and change the stages.",
+  "stages": [
+    {
+      "name": "Typhoon Dalisay",
+      "kind": "typhoon",
+      "damaged": ["LS-07", "L2", "T-03"],
+      "hazards": {"mey-malhacan": "live_wire"},
+      "seed": 7
+    },
+    {
+      "name": "Interruption in Bacoor",
+      "kind": "interruption",
+      "damaged": ["T-07"],
+      "reports": {"bac-talaba": 16, "bac-niog": 9, "bac-habay": 6},
+      "hazards": {},
+      "seed": 3
+    },
+    {
+      "name": "Interruption along MacArthur Hwy",
+      "kind": "interruption",
+      "damaged": ["L1"],
+      "hazards": {"val-karuhatan": "pole_down"},
+      "seed": 5
+    }
+  ]
+}

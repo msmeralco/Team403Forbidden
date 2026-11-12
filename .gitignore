@@ -7,3 +7,4 @@ __pycache__/
 .env
 .env.*
 /WEB_RUN.md
+backend/.cache/

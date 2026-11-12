@@ -1,26 +1,40 @@
 """FIRSTLOOK API. Run with: uvicorn app.main:app --reload (from the backend folder)."""
 from typing import Literal
 
+import base64
+import binascii
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from . import ai, cases, liwa
 from .config import CONFIG
 from .reports import SOURCES
 from .simulation import evaluate
-from .state import Conflict, Session
+from .state import Conflict, NeedsPlace, Session
 
 app = FastAPI(title="FIRSTLOOK", version="0.1.0")
 app.add_middleware(CORSMiddleware, allow_origin_regex=r"http://(localhost|127\.0\.0\.1):\d+",
                     allow_methods=["*"], allow_headers=["*"])
 
 _current = {"session": Session()}
-
+liwa.warm(_current["session"])            # load the embedding model and index the storm in the background
 
 
 def s() -> Session:
     return _current["session"]
+
+
+# Stand-in photos that residents "attached" in the demo storm (see photos/CREDITS.md).
+app.mount("/api/photos", StaticFiles(directory=ai.PHOTOS), name="photos")
+
+
+@app.exception_handler(NeedsPlace)
+async def needs_place(_: Request, exc: NeedsPlace):
+    return JSONResponse(status_code=409, content={"detail": str(exc), "need": "area"})
 
 
 @app.exception_handler(Conflict)
@@ -68,6 +82,78 @@ def network():
 def reports():
     """Every community report in this storm, newest first, with the channel catalogue."""
     return {"event_id": s().id, "sources": SOURCES, "reports": s().reports}
+
+
+@app.get("/api/liwa")
+def liwa_status():
+    """Whether Liwa can reach Claude Code, what is indexed (reference documents included), and a one-paragraph brief."""
+    return liwa.status(s())
+
+
+@app.get("/api/liwa/plan")
+def liwa_plan(force: bool = False):
+    """The inspection plan for the storm as it stands. Rewritten only when something changed, or when forced."""
+    return liwa.plan(s(), force)
+
+
+@app.get("/api/cases")
+def list_cases():
+    """Test cases found in backend/cases, and any file that could not be read."""
+    found, errors = cases.load_all()
+    return {"cases": [cases.summary(c) for c in found], "errors": errors, "current": s().case}
+
+
+@app.post("/api/cases/{case_id}/stages/{number}")
+def load_stage(case_id: str, number: int):
+    """Start one stage of a test case: stage 1 is the typhoon, later stages the interruptions that follow."""
+    case = cases.find(case_id)
+    if case is None or not 1 <= number <= len(case["stages"]):
+        raise KeyError(f"No stage {number} in case {case_id}")
+    _current["session"].alive = False
+    _current["session"] = Session(scenario=case["stages"][number - 1])
+    s().case = cases.summary(case, number)
+    liwa.warm(s())
+    return s().state()
+
+
+class Photo(BaseModel):
+    data: str                                                    # base64, without the data: prefix
+    media_type: Literal["image/jpeg", "image/png", "image/webp"]
+
+
+class NewReport(BaseModel):
+    text: str = Field(default="", max_length=600)
+    source: Literal["facebook_post", "facebook_comment", "x", "sms", "hotline", "app"] = "facebook_post"
+    area_id: str | None = None
+    photo: Photo | None = None      # a photo the presenter uploads
+    sample: str | None = None       # or one of the bundled stand-in photos, by file name
+
+
+MAX_PHOTO_BYTES = 4 * 1024 * 1024
+
+
+@app.post("/api/reports")
+def add_report(body: NewReport):
+    """Type in a message as if a resident had sent it. It is read, mapped and counted."""
+    photo = None
+    if body.photo:
+        try:
+            raw = base64.b64decode(body.photo.data, validate=True)
+        except (binascii.Error, ValueError):
+            return JSONResponse(status_code=400, content={"detail": "That photo could not be read."})
+        if len(raw) > MAX_PHOTO_BYTES:
+            return JSONResponse(status_code=413, content={"detail": "That photo is larger than 4 MB. Try a smaller one."})
+        photo = (raw, body.photo.media_type)
+    out = s().add_report(body.text, body.source, body.area_id, photo, body.sample)
+    return {**out, "state": s().state()}
+
+
+@app.get("/api/reports/{report_id}/photo")
+def report_photo(report_id: str):
+    if report_id not in s().uploads:
+        raise KeyError(f"No photo for {report_id}")
+    raw, media_type = s().uploads[report_id]
+    return Response(content=raw, media_type=media_type)
 
 
 class Hazard(BaseModel):
@@ -162,7 +248,9 @@ def truth():
 
 @app.post("/api/reset")
 def reset(body: Reset):
+    _current["session"].alive = False        # stop the old storm's AI reader
     _current["session"] = Session(seed=body.seed)
+    liwa.warm(s())
     return s().state()
 
 

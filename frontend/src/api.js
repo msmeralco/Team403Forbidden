@@ -5,13 +5,18 @@ async function call(path, body) {
     body: JSON.stringify(body),
   })
   const data = await res.json().catch(() => null)
-  if (!res.ok) throw new Error(data?.detail ? String(data.detail) : `Request failed (${res.status})`)
+  if (!res.ok) {
+    const error = new Error(data?.detail ? String(data.detail) : `Request failed (${res.status})`)
+    error.data = data   // some answers say what is missing, e.g. { need: 'area' }
+    throw error
+  }
   return data
 }
 
 export const api = {
   state: () => call('/state'),
   reports: () => call('/reports'),
+  addReport: (body) => call('/reports', body),
   repair: (asset, by = '') => call(`/assets/${asset}/repaired`, { by }),
   hazard: (area, handled) => call(`/areas/${area}/hazard`, { handled }),
   explain: (id) => call(`/recommendations/${id}/explain`),
@@ -24,6 +29,10 @@ export const api = {
   evaluate: (runs, seed) => call('/evaluate', { runs, seed }),
   config: () => call('/config'),
   truth: () => call('/truth'),
+  liwa: () => call('/liwa'),
+  liwaPlan: (force = false) => call(`/liwa/plan${force ? '?force=true' : ''}`),
+  cases: () => call('/cases'),
+  loadStage: (id, number) => call(`/cases/${encodeURIComponent(id)}/stages/${number}`, {}),
 }
 
 export const minutes = (m) => {
