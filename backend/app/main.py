@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .config import CONFIG
+from .reports import SOURCES
 from .simulation import evaluate
 from .state import Conflict, Session
 
@@ -32,15 +33,11 @@ async def not_found(_: Request, exc: KeyError):
     return JSONResponse(status_code=404, content={"detail": str(exc.args[0])})
 
 
-class Assign(BaseModel):
-    asset_id: str
-
-
 class Observation(BaseModel):
     asset_id: str
-    crew_id: str
     result: Literal["damaged", "intact", "inconclusive"] | None = None   # None = simulate from ground truth
     notes: str = ""
+    by: str = ""     # who reported it, e.g. "Line crew 4" (optional)
 
 
 class Priority(BaseModel):
@@ -69,7 +66,18 @@ def network():
 
 @app.get("/api/reports")
 def reports():
-    return [{"asset_id": a["id"], "count": a["reports"]} for a in s().state()["assets"] if a["reports"]]
+    """Every community report in this storm, newest first, with the channel catalogue."""
+    return {"event_id": s().id, "sources": SOURCES, "reports": s().reports}
+
+
+class Hazard(BaseModel):
+    handled: bool = True
+
+
+@app.post("/api/areas/{area_id}/hazard")
+def hazard(area_id: str, body: Hazard):
+    s().set_hazard(area_id, body.handled)
+    return s().state()
 
 
 @app.get("/api/scenarios")
@@ -95,25 +103,8 @@ def observations():
 
 @app.post("/api/observations")
 def observe(body: Observation):
-    obs = s().observe(body.crew_id, body.asset_id, body.result, body.notes)
+    obs = s().observe(body.asset_id, body.result, body.notes, body.by)
     return {"observation": obs, "state": s().state()}
-
-
-@app.get("/api/crews")
-def crews():
-    return s().crews_view()
-
-
-@app.post("/api/crews/{crew_id}/assign")
-def assign(crew_id: str, body: Assign):
-    s().assign(crew_id, body.asset_id)  
-    return s().state()
-
-
-@app.post("/api/crews/{crew_id}/unassign")
-def unassign(crew_id: str):
-    s().unassign(crew_id)
-    return s().state()
 
 
 @app.post("/api/roads/{edge_id}/block")
@@ -137,6 +128,17 @@ def restrict(asset_id: str):
 @app.post("/api/assets/{asset_id}/unrestrict")
 def unrestrict(asset_id: str):
     s().restrict(asset_id, False)
+    return s().state()
+
+
+class Repair(BaseModel):
+    by: str = ""
+
+
+@app.post("/api/assets/{asset_id}/repaired")
+def repaired(asset_id: str, body: Repair):
+    """Mark confirmed damage as repaired; residents behind it then report whether power came back."""
+    s().repair(asset_id, body.by)
     return s().state()
 
 

@@ -58,7 +58,7 @@ export default function Evaluation() {
       <div className="row head">
         <div>
           <h1>Evaluation</h1>
-          <p className="muted">Simulated storms, two crews. FirstLook against nearest-first and fixed-order inspection.</p>
+          <p className="muted">Simulated storms with two inspection teams. FirstLook against nearest-first and fixed-order inspection.</p>
         </div>
         <div className="actions">
           <label className="muted">Storms
