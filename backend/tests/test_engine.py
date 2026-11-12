@@ -35,8 +35,7 @@ def test_inconclusive_changes_nothing_and_keeps_asset_eligible():
     s = Session()
     before = s.posterior()
     target = s.recommendations()[0][0]["asset_id"]
-    s.assign("crew-1", target)
-    s.observe("crew-1", target, "inconclusive")
+    s.observe(target, "inconclusive")
     assert np.allclose(before, s.posterior())
     assert target in [r["asset_id"] for r in s.recommendations()[0]]
 
@@ -59,14 +58,13 @@ def test_restricted_and_inaccessible_assets_are_not_recommended():
     assert {e["asset_id"] for e in excluded} == {"LS-07", "T-08"}
 
 
-def test_engine_never_assigns_on_its_own_and_guards_assignments():
+def test_inspected_place_leaves_the_list_and_cannot_be_recorded_twice():
     s = Session()
-    assert all(c.asset_id is None for c in s.crews)
-    s.assign("crew-1", "F3")
+    s.observe("F3", "intact", by="Line crew 4")
+    assert "F3" not in [r["asset_id"] for r in s.recommendations()[0]]
+    assert s.observations[-1]["by"] == "Line crew 4"
     with pytest.raises(Conflict):
-        s.assign("crew-2", "F3")
-    with pytest.raises(Conflict):
-        s.observe("crew-2", "F3", "intact")
+        s.observe("F3", "damaged")
 
 
 def test_inspections_reduce_uncertainty_and_find_the_demo_truth():
@@ -75,8 +73,7 @@ def test_inspections_reduce_uncertainty_and_find_the_demo_truth():
         recs, _ = s.recommendations()
         if s.resources(s.posterior())["identified"] or not recs:
             break
-        s.assign(recs[0]["crew_id"], recs[0]["asset_id"])
-        s.observe(recs[0]["crew_id"], recs[0]["asset_id"], None)
+        s.observe(recs[0]["asset_id"], None)
     assert s.resources(s.posterior())["identified"]
     assert int(np.argmax(s.posterior())) == s.truth
     assert s.history[-1]["pct"] < 30
@@ -95,8 +92,8 @@ def test_api_flow():
     st = c.get("/api/state").json()
     top = st["recommendations"][0]
     assert c.get(f"/api/recommendations/{top['asset_id']}/explain").json()["if_damaged"]["scenarios"]
-    assert c.post(f"/api/crews/{top['crew_id']}/assign", json={"asset_id": top["asset_id"]}).status_code == 200
-    assert c.post("/api/crews/crew-2/assign", json={"asset_id": top["asset_id"]}).status_code == 409
-    r = c.post("/api/observations", json={"asset_id": top["asset_id"], "crew_id": top["crew_id"], "result": "intact"})
+    assert "crews" not in st and top["from"] in ("Pasig office", "Pasay office")
+    r = c.post("/api/observations", json={"asset_id": top["asset_id"], "result": "intact"})
     assert r.status_code == 200 and r.json()["state"]["log"][0]["result"] == "intact"
+    assert c.post("/api/observations", json={"asset_id": top["asset_id"], "result": "damaged"}).status_code == 409
     assert c.post("/api/roads/nope/block").status_code == 404

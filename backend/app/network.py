@@ -27,29 +27,86 @@ SUBSTATION = {"id": "SUB", "name": "Ortigas source substation", "place": "Pasig"
 # Listed from the substation outward (this is also the fixed-order baseline).
 ASSETS: list[Asset] = [
     # North corridor
-    Asset("F1", "segment", "Line section F1", "Ortigas – Cubao", 14.604, 121.058, "SUB"),
-    Asset("LS-01", "switch", "Line switch LS-01", "Cubao, Quezon City", 14.619, 121.053, "F1"),
-    Asset("T-01", "transformer", "Transformer T-01", "Diliman, Quezon City", 14.651, 121.049, "LS-01"),
-    Asset("F2", "segment", "Line section F2", "Cubao – Balintawak", 14.640, 121.025, "LS-01"),
-    Asset("P-04", "pole", "Structure P-04", "Balintawak, Quezon City", 14.657, 121.004, "F2"),
-    Asset("L1", "lateral", "Lateral L1", "Balintawak – Valenzuela", 14.680, 120.990, "P-04"),
-    Asset("T-02", "transformer", "Transformer T-02", "Valenzuela", 14.700, 120.983, "L1"),
-    Asset("T-03", "transformer", "Transformer T-03", "Meycauayan, Bulacan", 14.735, 120.961, "L1"),
+    Asset("F1", "segment", "Power line along EDSA (Ortigas to Cubao)", "Mandaluyong to Quezon City", 14.604, 121.058, "SUB"),
+    Asset("LS-01", "switch", "Switch on Aurora Blvd, Cubao", "Quezon City", 14.619, 121.053, "F1"),
+    Asset("T-01", "transformer", "Transformer near Philcoa, Diliman", "Quezon City", 14.651, 121.049, "LS-01"),
+    Asset("F2", "segment", "Power line along EDSA (Cubao to Balintawak)", "Quezon City", 14.640, 121.025, "LS-01"),
+    Asset("P-04", "pole", "Pole at Balintawak interchange", "Quezon City", 14.657, 121.004, "F2"),
+    Asset("L1", "lateral", "Power line along MacArthur Hwy", "Balintawak to Valenzuela", 14.680, 120.990, "P-04"),
+    Asset("T-02", "transformer", "Transformer on MacArthur Hwy, Gen. T. de Leon", "Valenzuela", 14.700, 120.983, "L1"),
+    Asset("T-03", "transformer", "Transformer in Malhacan", "Meycauayan, Bulacan", 14.735, 120.961, "L1"),
     # East corridor
-    Asset("F3", "segment", "Line section F3", "Ortigas – Marikina", 14.612, 121.085, "SUB"),
-    Asset("LS-07", "switch", "Lateral switch LS-07", "Marikina", 14.640, 121.100, "F3"),
-    Asset("T-04", "transformer", "Transformer T-04", "Antipolo, Rizal", 14.586, 121.176, "LS-07"),
-    Asset("L2", "lateral", "Lateral L2", "Marikina – San Mateo", 14.670, 121.112, "LS-07"),
-    Asset("T-05", "transformer", "Transformer T-05", "San Mateo, Rizal", 14.697, 121.122, "L2"),
-    Asset("T-06", "transformer", "Transformer T-06", "Rodriguez, Rizal", 14.730, 121.144, "L2"),
+    Asset("F3", "segment", "Power line along C5 and Marcos Hwy", "Pasig to Marikina", 14.612, 121.085, "SUB"),
+    Asset("LS-07", "switch", "Switch on Marcos Hwy", "Marikina", 14.640, 121.100, "F3"),
+    Asset("T-04", "transformer", "Transformer on Sumulong Hwy, San Roque", "Antipolo, Rizal", 14.586, 121.176, "LS-07"),
+    Asset("L2", "lateral", "Power line along Gen. Luna Ave", "Marikina to San Mateo", 14.670, 121.112, "LS-07"),
+    Asset("T-05", "transformer", "Transformer in Guitnang Bayan I", "San Mateo, Rizal", 14.697, 121.122, "L2"),
+    Asset("T-06", "transformer", "Transformer in San Jose", "Rodriguez, Rizal", 14.730, 121.144, "L2"),
     # South corridor
-    Asset("F4", "segment", "Line section F4", "Ortigas – Taguig", 14.540, 121.040, "SUB"),
-    Asset("P-12", "pole", "Structure P-12", "Sucat, Parañaque", 14.485, 121.045, "F4"),
-    Asset("L3", "lateral", "Lateral L3", "Sucat – Bacoor", 14.470, 121.000, "P-12"),
-    Asset("T-07", "transformer", "Transformer T-07", "Bacoor, Cavite", 14.459, 120.960, "L3"),
-    Asset("LS-05", "switch", "Line switch LS-05", "Alabang, Muntinlupa", 14.423, 121.040, "P-12"),
-    Asset("T-08", "transformer", "Transformer T-08", "San Pedro, Laguna", 14.358, 121.058, "LS-05"),
+    Asset("F4", "segment", "Power line along C5 (Ortigas to Taguig)", "Pasig to Taguig", 14.540, 121.040, "SUB"),
+    Asset("P-12", "pole", "Pole on Dr. A. Santos Ave, Sucat", "Parañaque", 14.485, 121.045, "F4"),
+    Asset("L3", "lateral", "Power line along CAVITEX", "Parañaque to Bacoor", 14.470, 121.000, "P-12"),
+    Asset("T-07", "transformer", "Transformer in Talaba II", "Bacoor, Cavite", 14.459, 120.960, "L3"),
+    Asset("LS-05", "switch", "Switch on National Rd, Alabang", "Muntinlupa", 14.423, 121.040, "P-12"),
+    Asset("T-08", "transformer", "Transformer in Landayan", "San Pedro, Laguna", 14.358, 121.058, "LS-05"),
 ]
+
+@dataclass(frozen=True)
+class Area:
+    """A barangay served by one transformer. Coordinates are approximate; households are invented."""
+    id: str
+    transformer: str
+    barangay: str
+    city: str
+    lat: float
+    lon: float
+    households: int
+    critical: tuple[str, ...] = ()
+
+
+# Three barangays behind each service transformer. Facility names are generic on purpose:
+# the storm is synthetic and should not suggest that a real hospital lost power.
+AREAS: list[Area] = [
+    Area("qc-central", "T-01", "Central", "Quezon City", 14.6480, 121.0470, 1800, ("Barangay health center",)),
+    Area("qc-krus-na-ligas", "T-01", "Krus na Ligas", "Quezon City", 14.6445, 121.0618, 1500),
+    Area("qc-up-campus", "T-01", "UP Campus", "Quezon City", 14.6545, 121.0647, 1200),
+
+    Area("val-gen-t-de-leon", "T-02", "Gen. T. de Leon", "Valenzuela", 14.6985, 120.9905, 2100, ("Water pumping station",)),
+    Area("val-karuhatan", "T-02", "Karuhatan", "Valenzuela", 14.6880, 120.9760, 1700),
+    Area("val-paso-de-blas", "T-02", "Paso de Blas", "Valenzuela", 14.7080, 120.9790, 1400),
+
+    Area("mey-malhacan", "T-03", "Malhacan", "Meycauayan, Bulacan", 14.7405, 120.9575, 2400, ("Elementary school (evacuation center)",)),
+    Area("mey-pandayan", "T-03", "Pandayan", "Meycauayan, Bulacan", 14.7330, 120.9670, 1900),
+    Area("mey-saluysoy", "T-03", "Saluysoy", "Meycauayan, Bulacan", 14.7240, 120.9620, 1300),
+
+    Area("ant-san-roque", "T-04", "San Roque", "Antipolo, Rizal", 14.5860, 121.1760, 2600, ("District hospital",)),
+    Area("ant-dela-paz", "T-04", "Dela Paz", "Antipolo, Rizal", 14.5760, 121.1690, 2200),
+    Area("ant-san-isidro", "T-04", "San Isidro", "Antipolo, Rizal", 14.5930, 121.1840, 1800),
+
+    Area("sm-guitnang-bayan", "T-05", "Guitnang Bayan I", "San Mateo, Rizal", 14.6960, 121.1210, 2000, ("Water pumping station",)),
+    Area("sm-ampid", "T-05", "Ampid I", "San Mateo, Rizal", 14.7040, 121.1180, 1600),
+    Area("sm-banaba", "T-05", "Banaba", "San Mateo, Rizal", 14.6830, 121.1140, 1400),
+
+    Area("rod-san-jose", "T-06", "San Jose", "Rodriguez, Rizal", 14.7340, 121.1530, 1700, ("Evacuation center",)),
+    Area("rod-burgos", "T-06", "Burgos", "Rodriguez, Rizal", 14.7270, 121.1420, 1300),
+    Area("rod-manggahan", "T-06", "Manggahan", "Rodriguez, Rizal", 14.7180, 121.1380, 1100),
+
+    Area("bac-talaba", "T-07", "Talaba II", "Bacoor, Cavite", 14.4500, 120.9580, 2300, ("District hospital",)),
+    Area("bac-niog", "T-07", "Niog I", "Bacoor, Cavite", 14.4540, 120.9700, 1900),
+    Area("bac-habay", "T-07", "Habay I", "Bacoor, Cavite", 14.4590, 120.9440, 1500),
+
+    Area("sp-landayan", "T-08", "Landayan", "San Pedro, Laguna", 14.3530, 121.0670, 2000, ("Barangay health center",)),
+    Area("sp-pacita", "T-08", "Pacita 1", "San Pedro, Laguna", 14.3480, 121.0560, 1800),
+    Area("sp-san-antonio", "T-08", "San Antonio", "San Pedro, Laguna", 14.3640, 121.0490, 1500),
+]
+
+
+def households_by_transformer() -> dict[str, int]:
+    out: dict[str, int] = {}
+    for a in AREAS:
+        out[a.transformer] = out.get(a.transformer, 0) + a.households
+    return out
+
 
 # Road nodes: every asset, the substation, and two extra places.
 EXTRA_NODES = {
@@ -74,7 +131,9 @@ ROAD_EDGES: list[tuple[str, str, str]] = [
 ]
 
 DEFAULT_BLOCKED = ("F3~LS-07", "L1~T-02")   # Marcos Hwy and MacArthur Hwy flooded
-CREW_DEPOTS = (("crew-1", "Crew 1", "SUB"), ("crew-2", "Crew 2", "PSY"))
+CREW_DEPOTS = (("crew-1", "Crew 1", "SUB"), ("crew-2", "Crew 2", "PSY"))   # evaluation only
+# Where an inspection would start from; drive times in the live view are measured from here.
+OFFICES = (("SUB", "Pasig office"), ("PSY", "Pasay office"))
 
 
 def edge_id(a: str, b: str) -> str:

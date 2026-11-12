@@ -11,11 +11,12 @@ async function call(path, body) {
 
 export const api = {
   state: () => call('/state'),
+  reports: () => call('/reports'),
+  repair: (asset, by = '') => call(`/assets/${asset}/repaired`, { by }),
+  hazard: (area, handled) => call(`/areas/${area}/hazard`, { handled }),
   explain: (id) => call(`/recommendations/${id}/explain`),
-  assign: (crew, asset) => call(`/crews/${crew}/assign`, { asset_id: asset }),
-  unassign: (crew) => call(`/crews/${crew}/unassign`, {}),
-  observe: (crew, asset, result, notes) =>
-    call('/observations', { crew_id: crew, asset_id: asset, result, notes }),
+  observe: (asset, result, notes = '', by = '') =>
+    call('/observations', { asset_id: asset, result, notes, by }),
   road: (id, blocked) => call(`/roads/${encodeURIComponent(id)}/${blocked ? 'block' : 'unblock'}`, {}),
   restrict: (id, on) => call(`/assets/${id}/${on ? 'restrict' : 'unrestrict'}`, {}),
   priority: (id, weight) => call(`/assets/${id}/priority`, { weight }),
