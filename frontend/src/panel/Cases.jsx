@@ -239,8 +239,7 @@ export function CaseDetail({ c, plan, rank, active, route, told, shift, busy, er
                         <div className="more">
                           {why(j, i) && <p className="reason"><b>Why first:</b> {why(j, i)}</p>}
                           <button className="btn primary sm" onClick={() => onResolve(j.pole_id)}><Check size={15} />Resolve</button>
-                          <button className="btn sm" disabled={busy} onClick={() => onChange(j.pole_id, 'unsafe')}>Not safe after all</button>
-                          {rank.go.length > 1 && <span className="muted small">Resolve marks it done and moves to number 2. Not safe after all puts it on hold and asks Liwa to rank again.</span>}
+                          <span className="muted small">Resolve once the crew has checked it: they fixed something, or there was nothing to fix.{rank.go.length > 1 ? ' Number 2 is next.' : ''}</span>
                         </div>
                       )}
                     </li>

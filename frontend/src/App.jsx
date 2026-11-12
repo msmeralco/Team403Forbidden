@@ -194,7 +194,7 @@ export default function App() {
   const active = rank ? (rank.go.find((j) => j.pole_id === picked) ?? rank.go[0])?.pole_id ?? null : null
   const resolve = (id, pole) => { setResolved((r) => ({ ...r, [id]: [...(r[id] ?? []), pole] })); setPicked(null) }
   const undo = (id, pole) => { setResolved((r) => ({ ...r, [id]: (r[id] ?? []).filter((p) => p !== pole) })); setPicked(null) }
-  // Conditions changed at one piece of equipment (made safe, flood cleared, not safe after all): the server records it
+  // Conditions changed at something on hold (made safe, flood cleared): the server records it
   // and Liwa ranks the interruption again as it now stands. What was resolved on screen is recorded at the same time.
   const changeCondition = async (id, pole, change) => {
     const now = cases.find((c) => c.id === id)
