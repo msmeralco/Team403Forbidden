@@ -1,8 +1,9 @@
 // Liwa's panel: the hierarchy she ranks by (the policy records in the reference database),
 // and a button that runs her on every interruption to check her against the test file. Nothing to type.
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Close } from '../icons'
 import { Flat } from './Flat'
+import Framework from './Framework'
 
 // "claude-opus-5-5" -> "Claude Opus 5.5"
 const modelName = (id = '') => {
@@ -13,6 +14,7 @@ const modelName = (id = '') => {
 
 export default function AssistantPanel({ status, cases, busy, running, style, onRunAll, onClose }) {
   const closeBtn = useRef(null)
+  const [frame, setFrame] = useState(false)
   useEffect(() => { closeBtn.current?.focus({ preventScroll: true }) }, [])
   const online = status?.generator === 'claude-code'
   const done = cases.filter((c) => c.decision)
@@ -26,6 +28,7 @@ export default function AssistantPanel({ status, cases, busy, running, style, on
           <Flat size={30} state={busy ? 'thinking' : 'idle'} />
           <h2>Liwa</h2>
           {status && <span className={`lp-mode${online ? ' on' : ''}`}>{online ? modelName(status.model) : 'Offline'}</span>}
+          <button className="lp-frame" onClick={() => setFrame(true)}>Show framework</button>
           <button ref={closeBtn} className="icon-btn" onClick={onClose} aria-label="Close Liwa's panel"><Close size={16} /></button>
         </div>
         <p className="muted small">When you open an interruption, I look up the hierarchy below in the reference database and rank its poles, live. I recommend; people decide, and Meralco&rsquo;s crews do the work.</p>
@@ -54,6 +57,8 @@ export default function AssistantPanel({ status, cases, busy, running, style, on
           {status && <span className="muted small">{online ? 'Ranks every interruption afresh and compares each answer with the test file. About 5 seconds each.' : 'Claude Code is not reachable: the test file’s own rule is used.'}</span>}
         </div>
       </footer>
+      {frame && <Framework model={online ? modelName(status.model) : null} policies={status?.guidance.length}
+        examples={status?.examples} onClose={() => setFrame(false)} />}
     </section>
   )
 }

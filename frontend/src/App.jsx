@@ -2,6 +2,7 @@
 // cases) appear as pins and as a list. Opening one shows the zone around it, the infrastructure
 // inside, the order Liwa ranks it in, and the crew's ETA from the nearest Meralco office.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
 import L from 'leaflet'
 import { api } from './api'
 import MapView from './map/MapView'
@@ -13,9 +14,42 @@ import TyphoonPanel from './typhoon/TyphoonPanel'
 import Records from './records/Records'
 import { makeTrack } from './typhoon/track'
 import { Mark, Meralco, Wordmark } from './Logo'
-import { Alert, Bell, Close, Landmark, Office, Pylon } from './icons'
+import { Alert, Bell, Close, Landmark, Office, Play, Pylon } from './icons'
 
 const NONE = []
+
+// The intro video. Shown only before the typhoon is started; plays full screen, with sound.
+function IntroVideo() {
+  const ref = useRef(null)
+  const [on, setOn] = useState(false)
+  const stop = useCallback(() => {
+    const v = ref.current
+    if (v) { v.pause(); v.currentTime = 0 }
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
+    setOn(false)
+  }, [])
+  useEffect(() => {
+    const left = () => { if (!document.fullscreenElement) stop() }
+    const esc = (e) => { if (e.key === 'Escape') stop() }
+    document.addEventListener('fullscreenchange', left)
+    window.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('fullscreenchange', left); window.removeEventListener('keydown', esc) }
+  }, [stop])
+  const play = () => {
+    flushSync(() => setOn(true))
+    const v = ref.current
+    v.muted = false
+    v.play().catch(() => {})
+    if (v.requestFullscreen) v.requestFullscreen().catch(() => {})
+    else if (v.webkitEnterFullscreen) v.webkitEnterFullscreen()
+  }
+  return (
+    <>
+      <button className="icon-btn raised" onClick={play} aria-label="Play the intro video"><Play /></button>
+      <video ref={ref} className={on ? 'intro-video on' : 'intro-video'} src="/intro.mp4" preload="metadata" playsInline controls onEnded={stop} />
+    </>
+  )
+}
 
 function useIsMobile() {
   const query = '(max-width: 820px)'
@@ -301,6 +335,7 @@ export default function App() {
         <button className="icon-btn raised bell" onClick={() => { setNotesOpen((o) => !o); setUnread(0) }} aria-label={`Notifications, ${unread} new`}>
           <Bell />{unread > 0 && <span className="badge">{unread}</span>}
         </button>
+        {phase === 'before' && <IntroVideo />}
         {notesOpen && (
           <div className="popover">
             <div className="pop-head"><strong>Notifications</strong><button className="icon-btn" onClick={() => setNotesOpen(false)} aria-label="Close notifications"><Close size={14} /></button></div>
